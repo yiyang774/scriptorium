@@ -24,6 +24,90 @@ The **rule body** of my `~/.claude/`, no runtime data.
 
 **Not included**: `projects/` (session data), `plugins/` (cache), `backups/`, `sessions/`, `tasks/`, machine-local overrides (`settings.local.json`) — all runtime, never committed (see `.gitignore`).
 
+## Installation
+
+⚠️ **Read "[Who can use this](#who-can-use-this)" first.** These rules default to single-machine single-user use, paths are hardcoded to `/Users/macbookpro/...`, and `settings.json` carries my personal proxy tokens plus model names exposed by my local proxy (`gpt-5.6-sol` / `gpt-5.6-luna` / `claude-fable-5` etc.). **It won't work out of the box** — follow the steps below to replace.
+
+### 1. Prerequisites
+
+Required:
+
+- **Claude Code** (the CLI itself) — the `claude` command must be on `PATH`
+- **git**, **bash** (macOS's default 3.2 is fine — the Plan-Gate script is written to be 3.2-compatible), **python3** (used inside hooks)
+
+Optional (each unlocks a specific capability):
+
+- **`codex` CLI** — required by Plan-Gate, L3 final review, and `[PRIMARY-SOURCE]` original-text retrieval; without it the entire frontier-review tier collapses
+- **`gh` CLI** — `[PR-GATE]` runs `gh pr create` / `gh pr merge`; without it you'll be opening PRs manually
+- **`codegraph` CLI** — the `impact` / `callers` / `callees` commands (MCP only exposes `explore`); see "Code location and blast radius". **Not required to run, you'll just lose shared-function blast-radius analysis**
+- **`rtk`** — command proxy for 60–90% token savings; `settings.json`'s PreToolUse hook has `rtk hook claude` wired in, and **the hook silently no-ops if `rtk` is missing**. The rule system itself doesn't depend on it
+
+### 2. Clone into place
+
+```bash
+# 1. Back up any existing ~/.claude (it may hold your own sessions/tokens — don't overwrite)
+mv ~/.claude ~/.claude.backup.$(date +%Y%m%d)
+
+# 2. Clone to the target location
+git clone https://github.com/yiyang774/scriptorium.git ~/.claude
+cd ~/.claude
+```
+
+### 3. What you MUST change (skipping any of these breaks the install or uses the wrong account)
+
+**1. Paths**: grep the whole tree for hardcoded absolutes and replace with your own:
+
+```bash
+grep -rn "/Users/macbookpro" ~/.claude --include="*.sh" --include="*.py" --include="*.md" --include="*.json"
+```
+
+Most hits are in `settings.json` (absolute paths for hook commands), `hooks/*.sh`, and `bin/*`; the count is small — mechanical substitute your `$HOME` (use the variable wherever the file allows it).
+
+**2. `settings.json` `env` block**: the `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` are **my personal proxy route** — you must replace with either:
+
+- Official Anthropic API: delete `ANTHROPIC_BASE_URL` entirely, put your API key in `ANTHROPIC_AUTH_TOKEN`
+- Or your own proxy
+
+**3. Model names**: `ANTHROPIC_DEFAULT_*_MODEL` and the `inferenceModels` / `models` list contain `claude-zyy00/*` and `tuzi-*` — all names exposed by my local proxy. On official API:
+
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` → an official ID like `claude-opus-5`
+- `ANTHROPIC_DEFAULT_SONNET_MODEL` → `claude-sonnet-5`
+- Same idea for the rest, or delete the block and use defaults
+
+**4. Codex-side model names**: `CLAUDE.md`, `ops/plan-gate.md`, and `ops/l2.md` all write `gpt-5.6-sol` / `gpt-5.6-luna` throughout — also local-proxy names. Either rename them (global search-replace) to match what your `~/.codex/config.toml` actually exposes, or switch to codex-official IDs like `gpt-5.5` / `gpt-5-mini`. **Skip this and Plan-Gate + L3 will both return "unknown model"**.
+
+**5. Git identity**: the repo's `.git/config` carries my `yiyang774`. After clone, git uses your global identity — no per-repo change needed; when you push to your own fork, change `origin`.
+
+### 4. Healthcheck + self-test
+
+```bash
+# Guard hook self-test (run after any guard or settings change)
+~/.claude/hooks/guard-selftest.sh
+
+# Memory structure healthcheck (purely structural — does not judge content)
+~/.claude/bin/mem-check ~/.claude/projects/-Users-macbookpro/memory
+
+# Global memory index (auto-loaded into sessions) — this repo ships no memory content;
+# empty on first run is expected
+ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(empty — you accumulate your own)"
+```
+
+Start a `claude` session, ask something like "what's the current working directory", and check:
+
+- ✅ Session starts normally (the `env` token / base URL are reachable)
+- ✅ No hook blocks (every hook script path resolves)
+- ✅ The `Skill` tool sees `brainstorming` / `plan` / `spec` etc. (marketplace fetched)
+
+Three checks green → installed.
+
+### 5. Common gotchas (worth knowing up front)
+
+- **Hook script paths must be absolute** — `command: /Users/macbookpro/...` in `settings.json` must be replaced in full; `~/.claude/hooks/...` or `$HOME/...` silently no-op because Claude Code does not expand `~`
+- **`.guard-off` is never committed** — `.gitignore` already excludes it; don't commit it during cleanup either
+- **Use `settings.local.json` for machine-local overrides** — don't edit `settings.json` for temporary token / hook / model tweaks; write them into `settings.local.json`, which `.gitignore` already excludes and will never contaminate the repo
+- **Missing `codegraph` or `rtk` doesn't block the main flow** — they're accelerators; without them you're a bit slower or lose one capability, but the rules still run
+- **Don't clone my global memory and reuse it** — this repo's top-level `projects/` in `.gitignore` already excludes global memory entries; on a fresh install `MEMORY.md` is empty and that's correct. Those entries are lessons I paid for personally, and adopting them wholesale would pollute your judgment
+
 ## Why it looks this way
 
 Because the single most common failure in long sessions is **"felt like I did it" = "actually did it"**. This rule system turns every step where I've slipped into a **hard gate** — **a few high-frequency slip paths are backed by hooks** (direct push to `main`, review call missing `-s read-only`, quantifier claim without a search command this turn, "I'll…" promise without a matching action) — **the rest of the hard gates still rely on L0 to execute the rule and leave a paper trail**. CLAUDE.md explicitly says "guards do not replace any hard gate."
@@ -123,6 +207,31 @@ Two kill-switch mechanisms, they work differently, don't mix them up:
 - **`touch ~/.claude/.guard-off`**: works mid-session too, but **you must declare the reason live and `rm -f` immediately when done**; forgetting to delete it silently disables the whole guard layer (learned the hard way on 2026-08-07)
 
 Kill switch ≠ exemption from any hard gate — Plan-Gate, L3, PR-GATE all remain in force; the guards are only their reminder layer.
+
+## Code location and blast radius: codegraph
+
+The rule system uses **codegraph** for one very specific job: **before changing a shared utility or aggregation function, run `codegraph impact <symbol>` to see what it touches and which tests will break**. Grep and semantic search structurally cannot do this — grep finds *names*, not the transitive set of files that will actually be affected via dynamic dispatch, trait impls, or wrapper layers.
+
+Ready-to-use if your repo has a `.codegraph/` directory (indexing is the user's decision, don't run `codegraph init` yourself). Four CLI commands cover the main use cases:
+
+```bash
+codegraph impact <symbol>     # blast radius: all symbols and tests that will be affected
+codegraph callers <symbol>    # who calls this
+codegraph callees <symbol>    # what does this call
+codegraph explore "<query>"   # verbatim source of relevant symbols + call paths between them
+```
+
+⚠️ **Trap: the MCP interface only exposes `explore`** — there is no `mcp__codegraph__impact`. Blast-radius analysis is CLI-only; if you dispatch a subagent to do it, tell it explicitly to use the shell `codegraph impact` command, otherwise it will call `codegraph_explore` and hand back names instead of blast radius.
+
+Empirical evidence (from paperI_motivation): `codegraph impact cluster_bootstrap` returned 68 hits — 36 of them completely invisible to grep, 33 of those being tests. Without the graph you'd change a bootstrap helper and only discover a week later, through CI red, that a downstream metric silently drifted.
+
+The `UserPromptSubmit` hook (`codegraph prompt-hook`) auto-injects relevant graph context into each prompt turn when a `.codegraph/` exists — no manual invocation needed for read paths.
+
+When dispatching a subagent, put this exact line into the brief:
+
+> "This repo has `.codegraph/`; before changing shared utilities or aggregation functions, run `codegraph impact <symbol>` (CLI) to check blast radius. The MCP side only exposes `codegraph_explore`, which does NOT return blast radius."
+
+**`.gitignore` hygiene**: the `.codegraph/` index directory should not be committed — it's regenerated per machine. This repo's `.gitignore` already excludes it. Cost is small: on paperI_motivation the graph is 4930 nodes / 12423 edges, ≈1.3 s to rebuild, 16 MB on disk — cheap enough to leave live.
 
 ## `ops/` files are the one source of truth
 

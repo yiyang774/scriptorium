@@ -26,6 +26,89 @@
 
 **不包含**:`projects/`(会话数据)、`plugins/`(缓存)、`backups/`、`sessions/`、`tasks/`、机器本地覆写(`settings.local.json`)——这些属运行时数据,永不入库(见 `.gitignore`)。
 
+## 怎么装
+
+⚠️ **先读"[谁能用](#谁能用)"节**——这套规则默认单机单用户、路径写死 `/Users/macbookpro/...`、`settings.json` 里带我个人的代理 token 与本地代理暴露的模型名(`gpt-5.6-sol` / `gpt-5.6-luna` / `claude-fable-5` 等)。**你不会开箱即用**,需要按下面步骤替换。
+
+### 一、前置
+
+必须装好:
+
+- **Claude Code**(CLI 本体)——本机 `claude` 命令可用
+- **git**、**bash**(macOS 自带 3.2 够用,但 Plan-Gate 脚本已按 3.2 兼容写)、**python3**(hook 里用)
+
+按需装好(缺哪个对应功能就用不了):
+
+- **`codex` CLI**——Plan-Gate、L3 终检、`[PRIMARY-SOURCE]` 原文取材都要它;没有的话 frontier 审查这一层直接坍掉
+- **`gh` CLI**——`[PR-GATE]` 走 `gh pr create` / `gh pr merge`;没有就只能手工开 PR
+- **`codegraph` CLI**——`impact` / `callers` / `callees` 三个命令(MCP 只暴露 `explore`);见"代码定位与影响面"节。**不装也能用,只是失去共用函数波及面分析**
+- **`rtk`**——命令代理,60–90% token 节省;`settings.json` 的 PreToolUse hook 里挂了 `rtk hook claude`,**没装 hook 会静默跳过这一条**,规则本身不依赖它
+
+### 二、拉仓 + 装到位
+
+```bash
+# 1. 备份现有 ~/.claude(如果有的话)——里面可能有你自己的会话/token,别覆盖掉
+mv ~/.claude ~/.claude.backup.$(date +%Y%m%d)
+
+# 2. Clone 到目标位置
+git clone https://github.com/yiyang774/scriptorium.git ~/.claude
+cd ~/.claude
+```
+
+### 三、必改项(不改就跑不起来或会用错帐号)
+
+**1. 路径**:全仓 grep 一下写死的绝对路径,换成你自己的:
+
+```bash
+grep -rn "/Users/macbookpro" ~/.claude --include="*.sh" --include="*.py" --include="*.md" --include="*.json"
+```
+
+主要在 `settings.json`(hook 命令的绝对路径)、hooks/*.sh、bin/* 里;数量不多,机械替换成你的 `$HOME`(能用变量的地方用变量)。
+
+**2. `settings.json` 的 `env` 段**:里面的 `ANTHROPIC_AUTH_TOKEN` 和 `ANTHROPIC_BASE_URL` 是**我的私人代理路由**,你必须换成:
+
+- 官方 Anthropic API:删掉整个 `ANTHROPIC_BASE_URL`,`ANTHROPIC_AUTH_TOKEN` 换成你的 API key
+- 或换成你自己的代理
+
+**3. 模型名**:`ANTHROPIC_DEFAULT_*_MODEL` 与 `inferenceModels` / `models` 列表里 `claude-zyy00/*`、`tuzi-*` 都是我本地代理暴露的名字。用官方 API 的话:
+
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` → `claude-opus-5` 之类官方 ID
+- `ANTHROPIC_DEFAULT_SONNET_MODEL` → `claude-sonnet-5`
+- 其它同理,或者整段删掉走默认
+
+**4. Codex 侧模型名**:`CLAUDE.md` 与 `ops/plan-gate.md`、`ops/l2.md` 里通篇写着 `gpt-5.6-sol` / `gpt-5.6-luna` —— 这也是本地代理名。你要么按 `~/.codex/config.toml` 里你实际能调的模型名重命名(全局搜索替换),要么改成 `gpt-5.5` / `gpt-5-mini` 一类 codex 官方模型 ID。**这一步不做,Plan-Gate 与 L3 全部报"unknown model"**。
+
+**5. git 身份**:仓库里 `.git/config` 是我的 `yiyang774`。第一次 clone 后 git 会用你机器的全局身份,不需要动仓库级配置;要 push 到你自己的 fork 时改 `origin`。
+
+### 四、体检 + 自测
+
+```bash
+# guard hook 自测(改过 guard 或 settings 都跑一次)
+~/.claude/hooks/guard-selftest.sh
+
+# 记忆结构体检(判据只查结构,不判内容)
+~/.claude/bin/mem-check ~/.claude/projects/-Users-macbookpro/memory
+
+# 全局记忆索引(会自动加载进会话)——本仓不装记忆内容,首次运行为空是正常的
+ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(空,你要自己攒)"
+```
+
+启一次 `claude`,随手问一句"当前工作目录",看:
+
+- ✅ 会话正常起(env 段的 token / base URL 通了)
+- ✅ 没被 hook 拦(所有 hook 脚本路径都对)
+- ✅ `Skill` 工具可见 `brainstorming` / `plan` / `spec` 等(marketplace 段拉到了)
+
+三条都对就装好了。
+
+### 五、几个常见坑(先说,免得踩)
+
+- **hook 脚本路径必须是绝对路径**——`settings.json` 里的 `command: /Users/macbookpro/...` 必须整段改,写 `~/.claude/hooks/...` 或 `$HOME/...` 都会静默失效,Claude Code 不解析 `~`
+- **`.guard-off` 永不入库**——`.gitignore` 已排除,清帐时也别 commit
+- **`settings.local.json` 用于机器本地覆写**——想临时改 token / hook / 模型别改 `settings.json`,写在 `settings.local.json` 里,它天然被 `.gitignore` 排除,不会污染仓库
+- **`codegraph`、`rtk` 缺一个不影响主流程**——它们是加速器,不装只是慢一点/失去某个能力,规则本身仍能跑
+- **不要 clone 我的全局记忆去用**——本仓 `.gitignore` 顶层 `projects/` 已排除全局记忆条目,新装完 `MEMORY.md` 索引为空是正常的;那些是我自己踩坑攒的教训,直接搬会污染你的判断
+
 ## 为什么要这么设计
 
 因为一个人在长会话里最容易犯的错是**"感觉做过了 = 真做了"。**这套规则把每个容易翻车的环节都变成**硬门槛——**少数高频手滑路径由 hook 兜底**(直接推 `main`、审查缺 `-s read-only`、报数没跑命令、说了"我会…"但没做),**其余硬门槛靠 L0 按规则执行和留痕**——CLAUDE.md 明确写着"guard 不替代任何硬门槛"。
@@ -125,6 +208,33 @@ L0 收口(读 L3 → 逐条核验 → 拍板)
 - **`touch ~/.claude/.guard-off`**:会话中途也生效,但**必须当场向用户声明理由,用完立即 `rm -f`**,忘删会静默让整套 guard 失效(2026-08-07 实测踩过)
 
 急停 ≠ 豁免任何硬门槛——Plan-Gate、L3、PR-GATE 照旧生效,guard 只是它们的提醒层。
+
+## 代码定位与影响面:codegraph
+
+grep 找得到"哪一行出现了这个名字",找不到"改了它会波及什么"——尤其聚合函数、共用工具、动态派发。规则把这层能力接进来:**改共用函数前必跑 `codegraph impact <symbol>`**,看波及面与会挂的测试。
+
+**前提**:只在有 `.codegraph/` 索引的仓库适用;没有就当它不存在——**建不建索引是用户的决定,规则不擅自建**。
+
+**用起来的四条命令**(细则 `ops/codegraph.md`):
+
+```bash
+codegraph impact <symbol>          # 改它会波及什么、哪些测试会挂
+codegraph callers <symbol>         # 谁调用了它
+codegraph callees <symbol>         # 它调用了谁
+codegraph explore "<问题或符号名>"  # 逐字源码 + 调用路径
+```
+
+⚠️ `impact` / `callers` / `callees` **只有 CLI 有**——MCP 侧默认只暴露 `codegraph_explore` 一个工具(实测 `tools/list` 确认)。别去找 `mcp__codegraph__impact`,它不存在,走 Bash。
+
+**为什么不是 grep 快慢的问题——是结构上做不到**:paperI_motivation 全仓实测(2026-08-05),`impact cluster_bootstrap` 报 **68 个受影响符号**,**其中 36 个所在文件从头到尾没出现过该符号名**(动态派发经聚合层链条到达),grep 永远找不到;且这 36 个里 33 个是测试。这正对症一次"聚合链最后一步藏雷、常数单测测不出"的事故(`delta_c_bootstrap` 双重 bootstrap 把置信区间压窄 28 倍)。
+
+**日常零操心**:本机已接 MCP + `UserPromptSubmit` hook——代码类提问会**自动注入结构上下文**,不必主动想起;写 spec / 改措辞 / 问口径这类非代码对话注入 **0 字符**,无成本。
+
+**派子代理时必须写进简报**(子代理无会话记忆,给路径没用):
+
+> 本仓已建 codegraph 索引;改共用函数前先跑 `codegraph impact <symbol>`,看波及面与会挂的测试。
+
+**卫生**:`.codegraph/` **必须进 `.gitignore`**——机器生成、体积不小,不进版本控制。参考开销:paperI_motivation 全仓 **4,930 节点 / 12,423 边、索引耗时 1.3 秒、产物 16 MB**。
 
 ## ops 文件是"唯一事实源"
 
