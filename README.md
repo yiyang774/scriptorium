@@ -58,7 +58,7 @@
 ```
 ① 预注册(候选表 + 指标契约 + 决策表 + 共享测量代码,过黄金样例)
 ② 设计审(advisory,fail 不阻断) → 测法不公平回 ①
-③ 并行派 N 个 L1 写原型(spike;窄例外:允许 Gate 前派)
+③ 并行派 N 个 L1 写原型(spike;窄例外:允许 Gate 前派)，模型和人一样，给他一个topic，他也是胡思乱想，但是要是有具体的实验或者原型（从github上面找）简单实现之后再头脑风暴会好很多
 ④ 原型快审(跨家族;作者是 codex 时由 Claude 审,advisory)
 ⑤ 真跑 → runs/YYYY-MM-DD-<slug>-<候选>/
 ⑥ 互盲分析(⑥A Codex sol ultra 证据账本 ‖ ⑥B Claude 全新上下文独立审阅)
