@@ -15,7 +15,7 @@
 - `ops/*.md` — 各硬门槛的细则(唯一事实源,不得凭记忆拼命令)
 - `hooks/` — 强制执行层(PreToolUse / Stop / SessionStart 等 hook)
 - `bin/` — 一批命令行小工具(建项目 / 找错误 / 体检记忆)
-- `agents/`, `skills/`, `workflows/`, `docs/` — subagent 定义、技能包、工作流脚本、共享文档
+- `agents/`, `workflows/`, `docs/` — subagent 定义、工作流脚本、共享文档
 - `settings.json` — Claude Code 的模型路由与 hook 注册
 - `RTK.md` — Rust Token Killer(命令代理,省 60-90% dev token)的用法索引
 
@@ -113,12 +113,12 @@ L0 收口(读 L3 → 逐条核验 → 拍板)
 
 ## 谁能用
 
-这套规则是我个人在长任务里踩坑攒出来的,**默认单机使用**——路径写死 `/Users/macbookpro/...`,skill 里三个 symlink 指向仓库外的 `~/.agents/skills/`。想跨机复用需要:
+这套规则是我个人在长任务里踩坑攒出来的,**默认单机使用**——路径写死 `/Users/macbookpro/...`。想跨机复用需要:
 
 1. 用户名不同就全局改路径(或改成 `$HOME`)
-2. 装外部 skill 依赖:`~/.agents/skills/` 下的 autoresearch / innovation-hunt / oral-review 是独立仓库
-3. `settings.json` 里的 token / base URL 是我的私人代理路由,你要换成自己的
-4. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` 是我本地代理暴露的模型名,你环境里名字可能不一样
+2. `settings.json` 里的 token / base URL 是我的私人代理路由,你要换成自己的
+3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` 是我本地代理暴露的模型名,你环境里名字可能不一样
+4. 本仓库**不含 skill 包**——`CLAUDE.md` 提到的若干 skill(如 `brainstorming`、`autoresearch`、`innovation-hunt`、`oral-review`、Addy 的 agent-skills、superpowers 系列)由 Claude Code 的 plugin marketplace 或独立仓库分发,自行按 `settings.json` 的 `enabledPlugins` 与 `extraKnownMarketplaces` 段获取
 
 ## 授权
 

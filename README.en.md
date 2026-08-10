@@ -15,7 +15,7 @@ The **rule body** of my `~/.claude/`, no runtime data.
 - `ops/*.md` — the one source of truth for each hard gate (never reconstruct commands from memory)
 - `hooks/` — the enforcement layer (PreToolUse / Stop / SessionStart hooks)
 - `bin/` — CLI helpers (new project scaffolding, mistake search, memory healthcheck)
-- `agents/`, `skills/`, `workflows/`, `docs/` — subagent definitions, skill packs, workflow scripts, shared docs
+- `agents/`, `workflows/`, `docs/` — subagent definitions, workflow scripts, shared docs
 - `settings.json` — Claude Code's model routing and hook registration
 - `RTK.md` — index for Rust Token Killer (a command proxy that saves 60-90% dev tokens)
 
@@ -113,12 +113,12 @@ A typical complex task:
 
 ## Who can use this
 
-I built this from mistakes I made in my own long tasks. **Default is single-machine use** — paths are hardcoded to `/Users/macbookpro/...` and three skills are symlinked to `~/.agents/skills/` outside this repo. To reuse cross-machine:
+I built this from mistakes I made in my own long tasks. **Default is single-machine use** — paths are hardcoded to `/Users/macbookpro/...`. To reuse cross-machine:
 
 1. Different username means rewriting paths (or switching them to `$HOME`)
-2. Install the external skill deps: `~/.agents/skills/`'s autoresearch / innovation-hunt / oral-review are separate repos
-3. `settings.json` has my personal proxy tokens and base URLs — replace with your own
-4. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` are model names exposed by my local proxy — the names in your environment will differ
+2. `settings.json` has my personal proxy tokens and base URLs — replace with your own
+3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` are model names exposed by my local proxy — the names in your environment will differ
+4. This repo **does not ship skill packs** — the skills mentioned in `CLAUDE.md` (`brainstorming`, `autoresearch`, `innovation-hunt`, `oral-review`, Addy's agent-skills, the superpowers suite, etc.) come from Claude Code's plugin marketplace or standalone repos; follow the `enabledPlugins` and `extraKnownMarketplaces` sections in `settings.json` to obtain them
 
 ## License
 
