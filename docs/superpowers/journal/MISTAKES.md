@@ -122,3 +122,85 @@
   模型分不清"这段是历史记录"和"这段是给我的任务"。
   更一般地：**"忘了去记"靠 hook 解决（不依赖记忆）；"记得不准"靠机械抽取解决（不依赖理解）。
   派便宜模型救不了前者**——派它的那一步同样会被忘。
+
+---
+
+## [E006] 2026-08-10 · `guard-pretool.sh` 的 `git push` 拦截被 `VAR=val <cmd>` 前缀绕过
+
+- **有效性**：active
+- **处置**：未修复（用户裁定备案但暂不补，以免同时挡掉自己后续同类工作；真正 push 必须**分成两个独立 Bash 工具调用**——**第一次调用只 `touch ~/.claude/.guard-off`；第二次调用做 `trap 'rm -f ~/.claude/.guard-off' EXIT; git push origin main`（或等价的 `git push origin main; rc=$?; rm -f ~/.claude/.guard-off; (exit $rc)`）**；push 完再单独用第三次调用 `ls -la ~/.claude/.guard-off 2>/dev/null` 核验已删。**不能塞在一个 Bash 调用里**——PreToolUse 在整条命令**执行前**跑，看不到还没跑的 `touch`，会解析出 `git push` 段直接命中前缀 glob 阻断（2026-08-10 L3 round-4 N1 实证）。**绝不用 `&&` 串** `touch && git push && rm`：即便侥幸拦不到，`git push` 失败（网络中断、远端拒绝、non-fast-forward、`-u` 上游没设等任何非零退出）后 `&&` 短路跳过 `rm`，`~/.claude/.guard-off` 静默残留，整套 guard 后续持续关闭。**两处 `.guard-off` 都必须写绝对路径 `~/.claude/.guard-off`**：`rm -f .guard-off` 是相对路径，从子目录跑只删当前目录空文件，全局急停文件同样残留）
+- **触发场景**：在同一次调用里写 `GUARD_OFF=1 git push origin main`，期望
+  ① `GUARD_OFF=1` 让 guard 放行（这条本身也是错的，见 `README.md:121-123` 与 `ops/enforcement.md:69-77` 的机制说明），
+  ② 或者靠 guard 的 `git push` 匹配把 push 拦下并让我意识到没关成。
+  实际两件事都没发生——guard 没拦、命令直接跑成。**本任务 5 次 push 全部命中**
+  （5 个 SHA 见下方"诚实澄清"段；task journal 事件流里"关 guard 的方式：`GUARD_OFF=1 git push -u origin main`"
+  是叙事错误，真机制是 `hooks/guard-pretool.sh` 的解析漏洞。原始 journal 在
+  `~/.claude/projects/-Users-macbookpro/journal/2026-08-10-git-init-claude-rules.md`——
+  该路径被本仓库顶层 `.gitignore` 的 `projects/` 排除，公开仓库读者无法沿此指针核验；
+  必要事实已并入本条 E006 正文与"诚实澄清"段）。
+- **正确做法**：
+  - **push 必须拆成两个独立 Bash 调用 + 一个核验调用**（**同一 Bash 调用里塞 `touch;...;git push;...;rm` 会被 PreToolUse 在整条命令执行前拦下**——`touch` 还没跑、`.guard-off` 尚不存在，hook 解析出 `git push` 段直接命中 `"git push"*` 前缀 glob；2026-08-10 L3 round-4 N1 实证）：
+    1) **第一次 Bash 调用**（只创建急停文件）：
+       ```bash
+       touch ~/.claude/.guard-off
+       ```
+    2) **第二次 Bash 调用**（trap-safe cleanup，绝不用 `&&` 短路）：
+       ```bash
+       trap 'rm -f ~/.claude/.guard-off' EXIT
+       git push origin main
+       ```
+       或等价的显式退出码保留：
+       ```bash
+       git push origin main; rc=$?
+       rm -f ~/.claude/.guard-off
+       (exit $rc)
+       ```
+    3) **第三次 Bash 调用**（核验已删）：
+       ```bash
+       ls -la ~/.claude/.guard-off 2>/dev/null && echo "警告:急停文件残留" || echo "已清理"
+       ```
+    第二次调用**进入 hook 时** `.guard-off` 已存在（第一次调用创建的），文件档 hook 直接放行整条命令（`hooks/guard-pretool.sh:14-17`）；trap 保证无论 `git push` 是否成功，`rm` 都会跑。
+    **旧写法 `touch … && git push … && rm -f …`（无论一段还是分段）已作废**：`&&` 短路特性下，只要 `git push`
+    非零退出（网络中断、远端拒绝、non-fast-forward、`-u` 上游未设、SSH 断线……任一），后面的 `rm`
+    就被跳过，`~/.claude/.guard-off` 静默残留，整套 guard 后续持续关闭——**cleanup 必须无条件跑，不能挂在 `&&` 上**。
+    **两处 `.guard-off` 都必须写绝对路径 `~/.claude/.guard-off`**；`rm -f .guard-off` 是相对路径，
+    从子目录跑就删不到全局急停文件，同样残留（见"处置"）。
+  - **禁止**在同一次调用里写 `GUARD_OFF=1 <cmd>`——两种失败模式：
+    (a) hook 在 export 生效前跑，变量对 hook 无效；
+    (b) 即使变量能生效，hook 也识别不出"应拦"的意图，静默通过。
+  - `GUARD_OFF=1` 只有在**启动 Claude Code 之前**由外部环境预导出才成立
+    （`GUARD_OFF=1 claude ...`）——见 `ops/enforcement.md:69-77`。
+- **根因**：`guard-pretool.sh` 用 `guard-split.py` 对整条命令做"引号感知分段"，
+  然后逐段与 glob 模式**前缀匹配**（如 `"git push"*` / `"codex exec"*`）。**关键事实**：
+  `guard-split.py` 只在**引号外**的 `;` / 换行 / `|` / `&` 处切分（见 `hooks/guard-split.py:19` 的
+  `SEPARATORS = ";\n|&"`），**不按空格切 token**、**不剥前导 `VAR=val` 环境赋值**。
+  于是 `GUARD_OFF=1 git push origin main` 保持为一整段字符串。当命令以 `VAR=val cmd ...` 开头时，
+  这一整段的开头是赋值 `GUARD_OFF=1` 而不是主命令，任何"以主命令开头"的前缀 glob 都不命中 → 漏拦。
+  与 hook 的语义意图相反：应该先剥掉前导 `VAR=val` 再看主命令，或改成"任意位置出现主命令"的检索。
+- **影响面不止 `git push`**：**同一漏洞同时影响 review-gate**。`guard-pretool.sh:98-101`（另一段
+  `while IFS= read -r seg` 分段循环）用 `"codex exec"*)` 前缀 glob 检查 codex 审查调用是否带
+  `-s read-only`——任何写成 `VAR=val codex exec ...` 的调用都会以 `VAR=val` 起头、不匹配
+  `"codex exec"*` 前缀，绕过 read-only 强制检查。故 E006 的机制描述适用于 `guard-pretool.sh` 里
+  **所有前缀 glob 拦截**（git push / gh pr merge / codex exec review），不局限于 push 一处。
+- **验证**：`echo "GUARD_OFF=1 git push origin main" | python3 hooks/guard-split.py`
+  实测输出**一行**：
+  ```
+  GUARD_OFF=1 git push origin main
+  ```
+  当前 `case` 语句 `while IFS= read -r seg; do ... case "$seg" in "git push"*) ...` 只遍历到这一段
+  （见 `hooks/guard-pretool.sh:61`），该段以 `GUARD_OFF=1` 起头，不匹配 `"git push"*` 前缀 → 漏拦。
+  review-gate 那段（`hooks/guard-pretool.sh:98` 起的 `while IFS= read -r seg`）同理，
+  以 `"codex exec"*` 匹配同样被 `VAR=val` 前缀绕开。
+- **补的话怎么补**（备案，不当下动）：在 `guard-pretool.sh` 现有引号感知分段之后、`case` 之前，
+  对每个 segment 剥掉**前导 assignment word**（一个或多个），再拿剥后串去匹配前缀 glob。
+  **assignment 正则用 `[A-Za-z_][A-Za-z0-9_]*=`**（POSIX shell 允许小写变量名，之前草案的
+  `[A-Z_][A-Z0-9_]*=` 会漏掉 `foo=1 git push ...` 这种小写赋值）。
+  **不要**用整命令一次性 `grep -qE '(^|[[:space:];&|])git[[:space:]]+push([[:space:]]|$)'`——
+  它会误命中 `echo x git push origin main` 与引号内含 `&& git push ...` 的字符串数据，
+  正是 `ops/enforcement.md:51-61` 记录的历史误拦（2026-08-10 L3 round-4 N3 实证）。
+  改完必跑 `hooks/guard-selftest.sh`；自测必须新增：① 小写赋值前缀绕过 ② 引号内 `git push` 字面量不误拦。
+- **用户当下裁定**：先备案不补——补了会同时挡掉我自己 `.guard-off` 之外的 push 路径；
+  近期 push 全部改用文件档急停；补不补等未来某次真正让我卡住时再定。
+- **诚实澄清**：本任务前 5 次 push（`6fe15de` / `186767d` / `6ac946f` / `5697f18` / `4d9b5f9`）
+  在 journal 事件流里被记为"`GUARD_OFF=1` 单次 env-var、零残留"，其实机制是这个 hook 漏洞。
+  push 本身按用户授权是合法的，机制描述则是错的。此条留档以纠正记忆。
