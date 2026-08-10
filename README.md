@@ -1,6 +1,7 @@
 # Scriptorium
 
 > 一套 Claude Code 的规约体系 —— L0 派活 · L1 执行 · L2 快审 · L3 终检;逐层背书,字字有据
+> 
 > 可以依据此规则修改 Codex （AGENT.md）
 >
 > [English README](./README.en.md)
