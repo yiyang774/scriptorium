@@ -10,14 +10,17 @@ A rule system that keeps Claude Code from concluding "should work" when doing en
 
 The **rule body** of my `~/.claude/`, no runtime data.
 
-57 files:
-- `CLAUDE.md` — global working rules (13 iron laws + 4 chapters of layered discipline)
-- `ops/*.md` — the one source of truth for each hard gate (never reconstruct commands from memory)
-- `hooks/` — the enforcement layer (PreToolUse / Stop / SessionStart hooks)
-- `bin/` — CLI helpers (new project scaffolding, mistake search, memory healthcheck)
-- `agents/`, `workflows/`, `docs/` — subagent definitions, workflow scripts, shared docs
-- `settings.json` — Claude Code's model routing and hook registration
-- `RTK.md` — index for Rust Token Killer (a command proxy that saves 60-90% dev tokens)
+56 files, by directory:
+
+| Directory | Files | Content |
+|---|---|---|
+| `ops/` | 14 | One source of truth for each hard gate (never reconstruct commands from memory) |
+| `hooks/` | 13 | The enforcement layer (PreToolUse / Stop / SessionStart hook scripts) |
+| `workflows/` | 9 | Workflow scripts (`deep-research.js`, the `finding-loop/` Python module, `_retired/`) |
+| `docs/` | 8 | Historical task archives under `docs/superpowers/{journal,plans,specs}/` (kept as examples) |
+| `bin/` | 5 | CLI helpers (`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
+| `agents/` | 1 | Currently only `fable-readonly-advisor.md` (Fable5 advisor subagent definition) |
+| top level | 6 | `CLAUDE.md` (13 iron laws + 4 chapters), `README.md` / `README.en.md`, `RTK.md`, `settings.json`, `.gitignore` |
 
 **Not included**: `projects/` (session data), `plugins/` (cache), `backups/`, `sessions/`, `tasks/`, machine-local overrides (`settings.local.json`) — all runtime, never committed (see `.gitignore`).
 

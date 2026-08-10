@@ -10,14 +10,17 @@
 
 `~/.claude/` 的**规则本体**,不含运行时数据。
 
-包含 57 个文件:
-- `CLAUDE.md` — 全局工作规则(13 条铁律 + 4 章分层纪律)
-- `ops/*.md` — 各硬门槛的细则(唯一事实源,不得凭记忆拼命令)
-- `hooks/` — 强制执行层(PreToolUse / Stop / SessionStart 等 hook)
-- `bin/` — 一批命令行小工具(建项目 / 找错误 / 体检记忆)
-- `agents/`, `workflows/`, `docs/` — subagent 定义、工作流脚本、共享文档
-- `settings.json` — Claude Code 的模型路由与 hook 注册
-- `RTK.md` — Rust Token Killer(命令代理,省 60-90% dev token)的用法索引
+包含 56 个文件,按目录:
+
+| 目录 | 文件数 | 内容 |
+|---|---|---|
+| `ops/` | 14 | 各硬门槛的细则(唯一事实源,不得凭记忆拼命令) |
+| `hooks/` | 13 | 强制执行层(PreToolUse / Stop / SessionStart 等 hook 脚本) |
+| `workflows/` | 9 | 工作流脚本(`deep-research.js`、`finding-loop/` Python 模块、`_retired/` 退役件) |
+| `docs/` | 8 | `docs/superpowers/{journal,plans,specs}/` 里的历史任务档案(留作范例) |
+| `bin/` | 5 | 命令行小工具(`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
+| `agents/` | 1 | 目前只有 `fable-readonly-advisor.md`(Fable5 顾问的 subagent 定义) |
+| 顶层 | 6 | `CLAUDE.md`(13 铁律 + 4 章分层)、`README.md` / `README.en.md`、`RTK.md`、`settings.json`、`.gitignore` |
 
 **不包含**:`projects/`(会话数据)、`plugins/`(缓存)、`backups/`、`sessions/`、`tasks/`、机器本地覆写(`settings.local.json`)——这些属运行时数据,永不入库(见 `.gitignore`)。
 
