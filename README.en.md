@@ -100,6 +100,29 @@ Kill switch: `export GUARD_OFF=1` (single call) or `touch ~/.claude/.guard-off` 
 
 **Read the corresponding ops file before firing a hard gate** — reconstructing arguments from memory either silently fails or gets blocked by a hook, and I've paid for that lesson.
 
+## Memory and task journal
+
+Beyond hard gates and hooks, the rule system also dictates what L0 **must remember, how, and where** — because the thing that most reliably vanishes across sessions is "the mistake I made last time."
+
+**Three memory tiers** (one-line test: **would this still be useful on a different project?**)
+
+| Tier | Location | What goes here |
+|---|---|---|
+| Global | `projects/<host>/memory/*.md` + `MEMORY.md` index in the same dir | Cross-project reusable lessons / preferences / methodologies (≤25 resident; the index auto-loads at session start) |
+| Project | `<project>/docs/superpowers/memory/*.md` + that project's `MEMORY.md` | State and details that only matter inside one project; read the project's `MEMORY.md` on entry |
+| Timeline | `<project>/docs/superpowers/journal/YYYY-MM-DD-<slug>.md` | One file per task; header status snapshot (overwritten each turn) + event stream (**append-only, never rewritten** — otherwise unfavorable records get "tidied away" and the journal loses its evidence value) |
+
+**Mistake log `<project>/docs/superpowers/journal/MISTAKES.md`**: project-specific traps only (cross-project lessons go into global `memory/`). Before delegating, `bin/mistakes [keyword]` prints ready-to-paste lesson snippets for subagent briefs (subagents have no conversation memory — a file path won't help them).
+
+**Memory entry shape**: frontmatter with `name` / `description` / `type` (user | feedback | project | reference); body uses `[[name]]` for cross-links. Scan for an existing entry that already covers the same thing before writing — update the old one rather than adding a duplicate; delete outright when something turns out to be wrong.
+
+**Healthcheck / tools**:
+- `bin/mem-check [dir]` — checks count, index consistency, and whether anything project-specific has been misfiled globally
+- `bin/mistakes [keyword]` — extracts active items from MISTAKES.md into a brief snippet
+- **Hook backup**: three hooks (`SessionStart` / `PreCompact` / `Stop`) auto-record session-boundary events, so "I forgot to log it" isn't an excuse
+
+⚠️ **This repo ships the mechanism, not the contents**: memory entries, task journals, and mistake logs all live under `projects/` and are excluded by `.gitignore`. **Don't clone my memory and reuse it** — it's mine, accumulated from my own mistakes, and adopting it wholesale would pollute your judgment. Grow your own.
+
 ## What a run looks like
 
 A typical complex task:
