@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# 极薄 L2 原型：按作者家族拼出合规的跨家族快审命令并执行。
+# 范围严格限定（Plan-Gate v5 三视角一致处方）：只拼命令，不做快照/receipt/JSONL/状态机。
+# 安全（v5 实证坐实）：用 --cached 不用 --force（避免 .env 入包）；留痕落仓库外。
+set -Eeuo pipefail
+
+AUTHOR=""; BASE=""; DRY=0
+usage() { echo "用法: l2 --author claude|codex|mixed [--base <ref>] [--dry-run]" >&2; exit 2; }
+need_val() { [ $# -ge 2 ] || { echo "✗ $1 缺少参数值" >&2; usage; }; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --author) need_val "$@"; AUTHOR="$2"; shift 2 ;;
+    --base)   need_val "$@"; BASE="$2";   shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    *) usage ;;
+  esac
+done
+
+case "$AUTHOR" in
+  claude|codex|mixed) ;;
+  *) echo "✗ --author 必填（claude|codex|mixed）；猜错会导致同家族自审" >&2; exit 2 ;;
+esac
+
+# 受审变更集：默认 staged（index vs HEAD）。未 stage 的改动不进包——显式而非猜测。
+# --base 给定时比对该基线 vs index；先验证它是真 commit，且用 -- 隔断防被当成路径。
+if [ -n "$BASE" ]; then
+  git rev-parse --verify -q "${BASE}^{commit}" >/dev/null \
+    || { echo "✗ --base '$BASE' 不是有效 commit" >&2; exit 2; }
+  DIFF=$(git diff --cached "$BASE" --)
+else
+  DIFF=$(git diff --cached --)
+fi
+[ -n "$DIFF" ] || { echo "✗ 无 staged 改动（先 git add，或用 --base）" >&2; exit 2; }
+
+# dry-run 是纯预览：不建目录、不落盘。留痕目录只在真跑时创建。
+if [ "$DRY" = 1 ]; then LOGDIR="<dry-run 不落盘>"; else LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/l2.XXXXXX"); fi
+PROMPT="对下面这份完整变更集做 L2 单元级快审：逮 bug、局部改进、可读性。
+不裁决架构（疑似牵涉架构只标记『架构嫌疑』）。
+输出分两档，每条含 文件:行 定位：must-fix（bug/正确性）与 nit（优美度/建议）。
+
+=== 变更集 ===
+$DIFF"
+
+run_codex() {
+  local cmd=(codex exec --skip-git-repo-check -m gpt-5.6-luna
+             -c model_reasoning_effort=max -s read-only -o "$LOGDIR/l2-codex.md" -)
+  if [ "$DRY" = 1 ]; then printf '%q ' "${cmd[@]}"; echo; return 0; fi
+  printf '%s' "$DIFF" > "$LOGDIR/changeset.patch"
+  printf '%s' "$PROMPT" | "${cmd[@]}" || echo "⚠ Codex L2 未生效（fail-不阻断），L3 照常全审" >&2
+}
+run_claude() {
+  local cmd=(claude -p --model sonnet --allowed-tools Read Grep Glob)
+  if [ "$DRY" = 1 ]; then printf '%q ' "${cmd[@]}"; echo; return 0; fi
+  printf '%s' "$DIFF" > "$LOGDIR/changeset.patch"   # 文件名即内容：只放 diff，不放提示词
+  printf '%s' "$PROMPT" | "${cmd[@]}" > "$LOGDIR/l2-claude.md" \
+    || echo "⚠ Claude L2 未生效（fail-不阻断），L3 照常全审" >&2
+  [ -s "$LOGDIR/l2-claude.md" ] && cat "$LOGDIR/l2-claude.md"
+}
+
+case "$AUTHOR" in
+  claude) run_codex ;;                    # 产出者 Claude → Codex 审
+  codex)  run_claude ;;                   # 产出者 Codex → Claude 审
+  mixed)  run_codex; run_claude ;;        # 兜底：两家族各一轮（注：非每 hunk 跨家族）
+esac
+[ "$DRY" = 1 ] || echo "留痕: $LOGDIR"

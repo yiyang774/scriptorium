@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""记忆库体检。用法: mem-check [记忆目录]  （默认 ~/.claude/projects/-Users-macbookpro/memory）
+
+查五类机器能判定的问题——都不需要理解内容，纯结构检查：
+  1. 悬空链接      [[X]] 但 X.md 不存在（含大小写不一致，macOS 下肉眼看不出）
+  2. 索引不同步    MEMORY.md 漏列的笔记 / 列了但文件已删的
+  3. 孤立笔记      没有任何笔记链接到它，且 MEMORY.md 也没列
+  4. frontmatter   缺 name/description/type，或 name 与文件名不符
+  5. 疑似重复      description 高度相似的两条（可能记了两遍同一件事）
+
+退出码 0=干净，1=有问题。不改动任何文件，只报告。
+"""
+import collections
+import pathlib
+import re
+import sys
+
+VALID_TYPES = {"user", "feedback", "project", "reference"}
+
+
+def parse_front(text):
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    out = {}
+    for line in text[3:end].split("\n"):
+        m = re.match(r"^\s*(name|description|type)\s*:\s*(.+?)\s*$", line)
+        if m:
+            out[m.group(1)] = m.group(2)
+    return out
+
+
+def main():
+    root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1
+                        else pathlib.Path.home() / ".claude/projects/-Users-macbookpro/memory")
+    if not root.is_dir():
+        print(f"✗ 目录不存在: {root}", file=sys.stderr)
+        return 2
+
+    notes = {p.stem: p for p in sorted(root.glob("*.md")) if p.name != "MEMORY.md"}
+    index = root / "MEMORY.md"
+    problems = 0
+
+    # ── 1. 悬空链接 ──
+    lower = {k.lower(): k for k in notes}
+    dangling = collections.defaultdict(list)
+    linked_to = set()
+    for stem, p in notes.items():
+        for tgt in re.findall(r"\[\[([^\]|#]+)", p.read_text(encoding="utf-8")):
+            tgt = tgt.strip()
+            if tgt in notes:
+                linked_to.add(tgt)
+            elif tgt.lower() in lower:
+                dangling[tgt].append((p.name, f"大小写不符，应为 {lower[tgt.lower()]}"))
+            else:
+                dangling[tgt].append((p.name, "目标不存在"))
+    if dangling:
+        problems += len(dangling)
+        print(f"⚠ 悬空链接 {len(dangling)} 个")
+        for tgt, srcs in sorted(dangling.items()):
+            print(f"   [[{tgt}]]  ({srcs[0][1]})")
+            for src, _ in srcs[:3]:
+                print(f"      ← {src}")
+
+    # ── 2. 索引同步 ──
+    if index.exists():
+        itext = index.read_text(encoding="utf-8")
+        listed = set(re.findall(r"\]\(([^)]+)\.md\)", itext))
+        missing = sorted(set(notes) - listed)
+        stale = sorted(listed - set(notes))
+        if missing:
+            problems += len(missing)
+            print(f"\n⚠ MEMORY.md 漏列 {len(missing)} 条")
+            for m in missing:
+                print(f"   · {m}")
+        if stale:
+            problems += len(stale)
+            print(f"\n⚠ MEMORY.md 列了但文件不存在 {len(stale)} 条")
+            for s in stale:
+                print(f"   · {s}")
+    else:
+        problems += 1
+        print("\n⚠ 缺 MEMORY.md 索引")
+
+    # ── 3. 孤立笔记 ──
+    listed_all = set()
+    if index.exists():
+        listed_all = set(re.findall(r"\]\(([^)]+)\.md\)", index.read_text(encoding="utf-8")))
+    orphans = sorted(set(notes) - linked_to - listed_all)
+    if orphans:
+        print(f"\nℹ 孤立笔记 {len(orphans)} 条（无人链接且未进索引，不一定是问题）")
+        for o in orphans[:10]:
+            print(f"   · {o}")
+
+    # ── 4. frontmatter ──
+    bad_front = []
+    for stem, p in notes.items():
+        fm = parse_front(p.read_text(encoding="utf-8"))
+        issues = []
+        if not fm:
+            issues.append("无 frontmatter")
+        else:
+            if "name" not in fm:
+                issues.append("缺 name")
+            elif fm["name"] != stem:
+                issues.append(f"name={fm['name']} 与文件名不符")
+            if "description" not in fm:
+                issues.append("缺 description")
+            t = fm.get("type", "")
+            if t and t not in VALID_TYPES:
+                issues.append(f"type={t} 非法")
+        if issues:
+            bad_front.append((p.name, "; ".join(issues)))
+    if bad_front:
+        problems += len(bad_front)
+        print(f"\n⚠ frontmatter 问题 {len(bad_front)} 条")
+        for name, iss in bad_front:
+            print(f"   · {name}: {iss}")
+
+    # ── 5. 疑似重复 ──
+    descs = {}
+    for stem, p in notes.items():
+        d = parse_front(p.read_text(encoding="utf-8")).get("description", "")
+        if d:
+            descs[stem] = set(re.findall(r"[\w一-鿿]+", d.lower()))
+    dupes = []
+    keys = sorted(descs)
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            if not descs[a] or not descs[b]:
+                continue
+            j = len(descs[a] & descs[b]) / len(descs[a] | descs[b])
+            if j >= 0.5:
+                dupes.append((a, b, j))
+    if dupes:
+        print(f"\nℹ 疑似重复主题 {len(dupes)} 对（description 相似度 ≥0.5，请人工判断）")
+        for a, b, j in sorted(dupes, key=lambda x: -x[2])[:8]:
+            print(f"   · {j:.0%}  {a}  ⟷  {b}")
+
+    print(f"\n── 共 {len(notes)} 条笔记；需处理问题 {problems} 项 ──")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

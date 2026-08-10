@@ -1,0 +1,226 @@
+{
+  "env": {
+    "//ANTHROPIC_AUTH_TOKEN": "moved to settings.local.json — never commit this key. Set it via env var or the local overrides file.",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:18792",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "claude-zyy00/claude-fable-5",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION": "1M context window via zyy00 route",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "Claude Fable 5 (zyy00, 1M)",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-zyy00/claude-haiku-4-5-20251001",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fast lightweight zyy00 model with 200K context window",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Claude Haiku 4.5 (zyy00, 200K)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "opus[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "1M context window via zyy00 route; local proxy maps opus[1m] to claude-zyy00/claude-opus-4-7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Claude Opus 4.7 (zyy00, 1M)",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-zyy00/claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Stable Sonnet route for auto-mode safety classifier; local proxy still adds 1M beta where supported",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Claude Sonnet 5 (zyy00, 1M route)",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "0",
+    "ANTHROPIC_BETAS": "context-1m-2025-08-07",
+    "NO_PROXY": "127.0.0.1,localhost,::1",
+    "no_proxy": "127.0.0.1,localhost,::1",
+    "HTTP_PROXY": "",
+    "HTTPS_PROXY": "",
+    "ALL_PROXY": "",
+    "http_proxy": "",
+    "https_proxy": "",
+    "all_proxy": "",
+    "CODEGRAPH_TELEMETRY": "0"
+  },
+  "permissions": {
+    "allow": [
+      "mcp__codegraph__*"
+    ],
+    "defaultMode": "auto",
+    "skipDangerousModePermissionPrompt": false
+  },
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/guard-pretool.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/preflight-l2-reminder.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/journal-sessionstart.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/guard-stop.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/journal-stop.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/journal-precompact.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/macbookpro/.claude/hooks/journal-facts.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph prompt-hook"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "agent-skills@addy-agent-skills": true,
+    "codex@openai-codex": true,
+    "ralph-loop@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "addy-agent-skills": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/addyosmani/agent-skills.git"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "superpowers-marketplace": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/obra/superpowers-marketplace.git"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "autoCompactWindow": 1000000,
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
+  "inferenceModels": [
+    {
+      "name": "opus[1m]",
+      "labelOverride": "Claude Opus 4.7 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-opus-5",
+      "labelOverride": "Claude Opus 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "sonnet[1m]",
+      "labelOverride": "Claude Sonnet 5 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-sonnet-5",
+      "labelOverride": "Claude Sonnet 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "claude-zyy00/claude-fable-5",
+      "labelOverride": "Claude Fable 5 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-fable-5",
+      "labelOverride": "Claude Fable 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "claude-zyy00/claude-haiku-4-5-20251001",
+      "labelOverride": "Claude Haiku 4.5 (zyy00, 200K)"
+    },
+    {
+      "name": "tuzi-haiku-4.5",
+      "labelOverride": "Claude Haiku 4.5 (tuzi, 200K)"
+    }
+  ],
+  "modelDiscoveryEnabled": false,
+  "models": [
+    {
+      "name": "opus[1m]",
+      "labelOverride": "Claude Opus 4.7 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-opus-5",
+      "labelOverride": "Claude Opus 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "sonnet[1m]",
+      "labelOverride": "Claude Sonnet 5 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-sonnet-5",
+      "labelOverride": "Claude Sonnet 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "claude-zyy00/claude-fable-5",
+      "labelOverride": "Claude Fable 5 (zyy00, 1M)"
+    },
+    {
+      "name": "tuzi-fable-5",
+      "labelOverride": "Claude Fable 5 (tuzi, 1M route)"
+    },
+    {
+      "name": "claude-zyy00/claude-haiku-4-5-20251001",
+      "labelOverride": "Claude Haiku 4.5 (zyy00, 200K)"
+    },
+    {
+      "name": "tuzi-haiku-4.5",
+      "labelOverride": "Claude Haiku 4.5 (tuzi, 200K)"
+    }
+  ]
+}

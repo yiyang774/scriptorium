@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""扫 runs/ 重生成实验总表。规范见 ~/.claude/ops/project-layout.md。
+
+设计要点（都对应一次真实的失败模式）：
+- 缺 config.json 的 run 目录【照样列进表】并标 status=unknown + 报警，绝不静默跳过
+  （静默跳过 = 表看着干净但漏了东西，是最坏的失败模式）
+- notes 列是唯一允许人写的列，重生成时按 run_id 从旧表合并回来，不会丢
+- 始终写 .csv（可 grep/diff/进 git）；装了 openpyxl 才额外写 .xlsx
+- 退出码：0 全部正常；1 有异常 run（缺文件/字段/目录名不符）；2 用法或环境错误
+"""
+import csv
+import json
+import os
+import re
+import sys
+
+FIXED_HEAD = ["run_id", "date", "slug", "status", "git_sha", "started_at"]
+FIXED_TAIL = ["artifacts_path", "artifacts_bytes", "notes"]
+VALID_STATUS = {"running", "done", "failed", "discarded"}
+RUN_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-(.+)$")
+
+
+def die(msg, code=2):
+    print(f"✗ {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def dir_bytes(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            fp = os.path.join(root, f)
+            if not os.path.islink(fp):
+                try:
+                    total += os.path.getsize(fp)
+                except OSError:
+                    pass
+    return total
+
+
+def read_metrics(path, warns, run_id):
+    """读 metrics.csv。支持两种形态：单行宽表（列=指标），或 key,value 两列长表。"""
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.reader(fh))
+    except OSError as e:
+        warns.append(f"{run_id}: metrics.csv 读取失败 ({e})")
+        return {}
+    rows = [r for r in rows if r and any(c.strip() for c in r)]
+    if len(rows) < 2:
+        warns.append(f"{run_id}: metrics.csv 无数据行")
+        return {}
+    head = [c.strip() for c in rows[0]]
+    if len(head) == 2 and head[0].lower() in ("key", "metric", "name"):
+        out = {}
+        for r in rows[1:]:
+            if len(r) >= 2 and r[0].strip():
+                out[r[0].strip()] = r[1].strip()
+        return out
+    if len(rows) > 2:
+        warns.append(f"{run_id}: metrics.csv 有多行，只取第一行数据行")
+    vals = rows[1] + [""] * (len(head) - len(rows[1]))
+    return {h: vals[i].strip() for i, h in enumerate(head) if h}
+
+
+def load_old_notes(csv_path):
+    """从旧表读回 notes（唯一人工列），按 run_id 合并。"""
+    notes = {}
+    if not os.path.exists(csv_path):
+        return notes
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                rid = (row.get("run_id") or "").strip()
+                note = (row.get("notes") or "").strip()
+                if rid and note:
+                    notes[rid] = note
+    except (OSError, csv.Error) as e:
+        print(f"⚠ 旧表 notes 读取失败，本次不合并: {e}", file=sys.stderr)
+    return notes
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    root = os.path.abspath(args[0]) if args else os.getcwd()
+    runs_dir = os.path.join(root, "runs")
+    if not os.path.isdir(runs_dir):
+        die(f"没有 runs/ 目录: {runs_dir}\n  （新建项目用 ~/.claude/bin/newproj）")
+
+    csv_path = os.path.join(root, "EXPERIMENTS.csv")
+    old_notes = load_old_notes(csv_path)
+
+    warns, records, metric_cols = [], [], []
+    entries = sorted(
+        d for d in os.listdir(runs_dir)
+        if os.path.isdir(os.path.join(runs_dir, d)) and not d.startswith(".")
+    )
+    for name in entries:
+        rd = os.path.join(runs_dir, name)
+        rec = {k: "" for k in FIXED_HEAD}
+        rec["run_id"] = name
+
+        m = RUN_RE.match(name)
+        if m:
+            rec["date"], rec["slug"] = m.group(1), m.group(2)
+        else:
+            warns.append(f"{name}: 目录名不符 YYYY-MM-DD-<slug>")
+
+        cfg_path = os.path.join(rd, "config.json")
+        if os.path.exists(cfg_path):
+            try:
+                with open(cfg_path, encoding="utf-8") as fh:
+                    cfg = json.load(fh)
+                if not isinstance(cfg, dict):
+                    raise ValueError("顶层不是对象")
+                for k in ("status", "git_sha", "started_at"):
+                    v = cfg.get(k)
+                    if v is None or str(v).strip() == "":
+                        warns.append(f"{name}: config.json 缺字段 {k}")
+                    else:
+                        rec[k] = str(v).strip()
+                cfg_id = str(cfg.get("run_id", "")).strip()
+                if cfg_id and cfg_id != name:
+                    warns.append(f"{name}: config.json 的 run_id='{cfg_id}' 与目录名不符")
+                if rec["status"] and rec["status"] not in VALID_STATUS:
+                    warns.append(
+                        f"{name}: status='{rec['status']}' 不在 "
+                        f"{'/'.join(sorted(VALID_STATUS))} 之内"
+                    )
+            except (OSError, ValueError) as e:
+                warns.append(f"{name}: config.json 解析失败 ({e})")
+                rec["status"] = "unknown"
+        else:
+            # 关键：不静默跳过
+            warns.append(f"{name}: 缺 config.json —— 已列入表并标 status=unknown")
+            rec["status"] = "unknown"
+
+        mp = os.path.join(rd, "metrics.csv")
+        if os.path.exists(mp):
+            for k, v in read_metrics(mp, warns, name).items():
+                rec[k] = v
+                if k not in metric_cols and k not in FIXED_HEAD and k not in FIXED_TAIL:
+                    metric_cols.append(k)
+        else:
+            warns.append(f"{name}: 无 metrics.csv")
+
+        art = os.path.join(rd, "artifacts")
+        if os.path.isdir(art):
+            rec["artifacts_path"] = os.path.relpath(art, root)
+            rec["artifacts_bytes"] = str(dir_bytes(art))
+        else:
+            rec["artifacts_path"] = ""
+            rec["artifacts_bytes"] = "0"
+
+        rec["notes"] = old_notes.get(name, "")
+        records.append(rec)
+
+    header = FIXED_HEAD + metric_cols + FIXED_TAIL
+    tmp = csv_path + ".tmp"
+    with open(tmp, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=header, extrasaction="ignore")
+        w.writeheader()
+        for rec in records:
+            w.writerow({k: rec.get(k, "") for k in header})
+    os.replace(tmp, csv_path)
+    print(f"✅ {csv_path}  （{len(records)} 个 run，{len(metric_cols)} 个指标列）")
+
+    xlsx_path = os.path.join(root, "EXPERIMENTS.xlsx")
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+    except ImportError:
+        print("ℹ 未装 openpyxl，跳过 .xlsx（CSV 已够用；如需 xlsx: pip install openpyxl）")
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "experiments"
+        ws.append(header)
+        for c in ws[1]:
+            c.font = Font(bold=True)
+        for rec in records:
+            ws.append([rec.get(k, "") for k in header])
+        ws.freeze_panes = "A2"
+        for i, h in enumerate(header, 1):
+            width = max(len(str(h)), *(len(str(r.get(h, ""))) for r in records)) if records else len(str(h))
+            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = min(max(width + 2, 10), 40)
+        wb.save(xlsx_path)
+        print(f"✅ {xlsx_path}")
+
+    if warns:
+        print(f"\n⚠ {len(warns)} 项需注意（未静默跳过任何 run）：", file=sys.stderr)
+        for w_ in warns:
+            print(f"   · {w_}", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

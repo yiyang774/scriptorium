@@ -1,0 +1,65 @@
+# ~/.claude/.gitignore
+# 只纳管【规则体系】（CLAUDE.md / ops / hooks / bin / skills / agents / workflows / docs / settings.json / RTK.md）
+# 排除【运行时数据】与【机器本地状态】——它们体量大、变动频繁、且常含机器路径或临时状态
+
+# ─── 会话与项目数据（833M+，绝不入库） ─────────────────────────────
+projects/
+sessions/
+tasks/
+jobs/
+workflows/*/runs/
+
+# ─── 项目级 plan 不应放全局（属项目内 docs/superpowers/plans/） ─────
+# ⚠️ 前导 / 是根锚定，只匹配顶层 plans/；否则会误伤 docs/superpowers/plans/ 等任意深度同名目录
+/plans/
+
+# ─── 备份 / 历史 / 缓存（本地衍生物） ──────────────────────────────
+backups/
+.backups/
+file-history/
+cache/
+paste-cache/
+session-env/
+shell-snapshots/
+downloads/
+
+# ─── 长期后台服务的本地状态 ──────────────────────────────────────
+daemon/
+daemon.log
+local-proxy/
+telemetry/
+
+# ─── 各子系统的临时状态 / 缓存 ───────────────────────────────────
+.plangate/
+.guard/
+.codexreview/
+plugins/
+hooks/.stop-stamps/
+hooks/__pycache__/
+bin/.stop-stamps/
+bin/_plangate/
+
+# ─── 顶层临时文件 ──────────────────────────────────────────────
+stats-cache.json
+history.jsonl
+.last-cleanup
+.last-update-result.json
+.DS_Store
+
+# ─── 急停阀（永远别 commit——留在版本里等于永久关闭 guard） ─────────
+.guard-off
+
+# ─── 机器本地覆写层（语义上属本地，永不入库） ─────────────────────
+settings.local.json
+
+# ─── 通用 Python / 编辑器噪声 ─────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ─── obsidian 索引（memory 里的笔记应用生成物） ────────────────
+projects/*/memory/.obsidian/

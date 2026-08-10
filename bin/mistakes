@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""错误档查询：把 active 条目的「触发场景 + 正确做法」按简报格式吐出来。
+
+用法：
+  mistakes                    # 当前目录所属项目的全部 active 条目
+  mistakes <关键词>           # 只出触发场景/标题里含该词的（派活前按任务筛）
+  mistakes --list             # 一行一条的清单（看有哪些坑）
+  mistakes --path <项目根>    # 指定项目
+
+设计动机：规则要求"派活前扫错误档，把触发场景+正确做法【逐字】抄进简报"。
+手工扫会漏、会抄错格式、会顺手把"后果/根因"也抄进去（那些是给人判断轻重的，
+塞进简报只稀释重点）。本工具直接产出可粘贴的简报片段。
+
+退出码：0=找到条目；1=无匹配；2=找不到错误档。
+"""
+import argparse
+import pathlib
+import re
+import sys
+
+FIELD_KEEP = ("触发场景", "正确做法")
+
+
+def find_mistakes(start):
+    """从 start 向上找 MISTAKES.md（项目根可能在上层）。"""
+    cur = pathlib.Path(start).resolve()
+    for base in [cur, *cur.parents]:
+        for rel in ("docs/superpowers/journal/MISTAKES.md",
+                    "docs/MISTAKES.md",
+                    "MISTAKES.md"):
+            p = base / rel
+            if p.is_file():
+                return p
+        if (base / ".git").exists() and base != cur:
+            break
+    return None
+
+
+def parse(text):
+    """切成条目。每条 = {id, title, fields:{名:内容}, active:bool}"""
+    out = []
+    chunks = re.split(r"^## (?=\[E)", text, flags=re.M)
+    for ch in chunks[1:]:
+        head = ch.split("\n", 1)[0].strip()
+        m = re.match(r"\[(E\d+)\]\s*(.*)", head)
+        if not m:
+            continue
+        eid, title = m.group(1), m.group(2)
+        fields, cur, buf = {}, None, []
+        for line in ch.split("\n")[1:]:
+            fm = re.match(r"^-\s*\*\*(.+?)\*\*\s*[:：]\s*(.*)$", line)
+            if fm:
+                if cur:
+                    fields[cur] = "\n".join(buf).strip()
+                cur, buf = fm.group(1), [fm.group(2)]
+            elif cur is not None:
+                if line.startswith("## ") or line.startswith("---"):
+                    break
+                buf.append(line)
+        if cur:
+            fields[cur] = "\n".join(buf).strip()
+        valid = fields.get("有效性", "").strip()
+        out.append({"id": eid, "title": title, "fields": fields,
+                    "active": valid.startswith("active")})
+    return out
+
+
+def clean(s):
+    """去掉尾随空行与多余缩进，保持可粘贴。"""
+    lines = [ln.rstrip() for ln in s.split("\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("keyword", nargs="?", default="")
+    ap.add_argument("--path", default=".")
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("-h", "--help", action="store_true")
+    a = ap.parse_args()
+    if a.help:
+        print(__doc__)
+        return 0
+
+    mf = find_mistakes(a.path)
+    if not mf:
+        print(f"✗ 从 {pathlib.Path(a.path).resolve()} 向上没找到 MISTAKES.md", file=sys.stderr)
+        print("  （约定位置：<项目>/docs/superpowers/journal/MISTAKES.md）", file=sys.stderr)
+        return 2
+
+    entries = parse(mf.read_text(encoding="utf-8"))
+    active = [e for e in entries if e["active"]]
+    kw = a.keyword.strip()
+    if kw:
+        low = kw.lower()
+        active = [e for e in active
+                  if low in e["title"].lower()
+                  or low in e["fields"].get("触发场景", "").lower()
+                  or low in e["fields"].get("正确做法", "").lower()]
+
+    if a.list:
+        print(f"# {mf}  （{len(entries)} 条，active {sum(e['active'] for e in entries)}）")
+        for e in entries:
+            flag = "●" if e["active"] else "○"
+            print(f"  {flag} [{e['id']}] {e['title']}")
+        return 0 if entries else 1
+
+    if not active:
+        print(f"（{mf.name} 里没有匹配 '{kw}' 的 active 条目）" if kw
+              else f"（{mf.name} 里没有 active 条目）")
+        return 1
+
+    print("<<< 以下内容可直接粘进子代理简报 >>>")
+    print()
+    print(f"## 本项目已知的坑（{len(active)} 条，必须避开）")
+    print()
+    for e in active:
+        print(f"### {e['id']} · {e['title']}")
+        for f in FIELD_KEEP:
+            v = e["fields"].get(f)
+            if v:
+                print(f"- **{f}**：{clean(v)}")
+        print()
+    print(f"<<< 出处 {mf}；共 {len(entries)} 条，其中 active {len(active)} 条 >>>")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

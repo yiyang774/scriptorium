@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# 按 ~/.claude/ops/project-layout.md 建项目骨架。
+# 设计原则：已存在则拒绝（绝不覆盖用户已有文件）；只建目录与模板，不装依赖、不跑构建。
+set -Eeuo pipefail
+
+usage() { echo "用法: newproj <project-name> [父目录]   # 名字须 kebab-case" >&2; exit 2; }
+[ $# -ge 1 ] || usage
+NAME="$1"; PARENT="${2:-$PWD}"
+
+# kebab-case 校验：小写字母开头，只含小写/数字/连字符，不以连字符收尾
+case "$NAME" in
+  -*|*-) echo "✗ 名字不能以连字符开头或结尾: $NAME" >&2; exit 2 ;;
+esac
+printf '%s' "$NAME" | grep -qE '^[a-z][a-z0-9-]*$' \
+  || { echo "✗ 名字须 kebab-case（小写字母开头，仅小写/数字/连字符）: $NAME" >&2; exit 2; }
+# 规范禁止的后缀（见 ops/project-layout.md §2）
+printf '%s' "$NAME" | grep -qE -- '-(project|test|new)$' \
+  && { echo "✗ 不要用 -project / -test / -new 后缀（见 ops/project-layout.md §2）: $NAME" >&2; exit 2; }
+
+[ -d "$PARENT" ] || { echo "✗ 父目录不存在: $PARENT" >&2; exit 2; }
+ROOT="$PARENT/$NAME"
+[ -e "$ROOT" ] && { echo "✗ 已存在，拒绝覆盖: $ROOT" >&2; exit 1; }
+
+mkdir -p "$ROOT"/{src,tests,runs,scratch,docs/superpowers/{specs,plans,journal}}
+
+cat > "$ROOT/README.md" <<EOF
+# $NAME
+
+<一句话说明这个项目做什么>
+
+## 怎么跑起来
+
+\`\`\`bash
+# <补上真实命令>
+\`\`\`
+
+## 布局
+
+本项目遵循 \`~/.claude/ops/project-layout.md\`：
+实验产物在 \`runs/YYYY-MM-DD-<slug>/\`，总表 \`EXPERIMENTS.csv\` 由
+\`~/.claude/bin/exp-index\` 重生成（勿手改，\`notes\` 列除外）。
+EOF
+
+cat > "$ROOT/.gitignore" <<'EOF'
+# 重产物与临时（见 ops/project-layout.md）
+runs/*/artifacts/
+scratch/
+# 密钥与本地配置
+*.local.*
+*.key
+.env
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+# Excel 锁文件
+~$*.xlsx
+EOF
+
+# runs/ 与 scratch/ 需要在空目录时也进 git
+cat > "$ROOT/runs/.gitkeep" <<'EOF'
+EOF
+
+cat > "$ROOT/runs/README.md" <<'EOF'
+# runs/
+
+一次实验一个目录，命名 `YYYY-MM-DD-<slug>`（slug 与 spec/plan/journal 对齐）。
+
+**只追加，绝不修改已有 run**——改了等于毁证据。
+跑错了新开一个目录，并把旧目录 config.json 的 status 标为 `discarded`。
+
+每个 run 目录里：
+
+    config.json    必填 run_id/status/git_sha/started_at，外加自由的 params
+    metrics.csv    指标；列名 snake_case 带单位后缀
+    run.log        运行日志
+    artifacts/     重产物（权重/checkpoint/原始数据），已 gitignore
+
+status 只允许：running / done / failed / discarded
+EOF
+
+if command -v git >/dev/null 2>&1 && [ ! -d "$ROOT/.git" ]; then
+  git -C "$ROOT" init -q && echo "  · git 仓库已初始化"
+fi
+
+echo "✅ 已创建: $ROOT"
+echo "   src/ tests/ runs/ scratch/ docs/superpowers/{specs,plans,journal}/"
+echo "   README.md .gitignore runs/README.md"
+echo
+echo "下一步：跑完实验后用  ~/.claude/bin/exp-index $ROOT  生成总表"
