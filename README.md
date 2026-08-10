@@ -1,6 +1,6 @@
-# claude-ops
+# Scriptorium
 
-> Personal Claude Code rule system — 分层协作流水线 · 硬门槛 · 强制执行 · 证据优先
+> 一套 Claude Code 的规约体系 —— L0 派活 · L1 执行 · L2 快审 · L3 终检;逐层背书,字字有据
 >
 > [English README](./README.en.md)
 
@@ -203,5 +203,5 @@ L0 收口(读 L3 → 逐条核验 → 拍板)
 如果这套规则对你有启发,欢迎引用仓库地址:
 
 ```
-https://github.com/yiyang774/claude-ops
+https://github.com/yiyang774/scriptorium
 ```

@@ -1,6 +1,6 @@
-# claude-ops
+# Scriptorium
 
-> Personal Claude Code rule system — layered pipeline, hard gates, enforced guards, evidence-first.
+> A rule system for Claude Code — L0 dispatches, L1 executes, L2 pre-checks, L3 finalizes; every claim copied, checked, and countersigned.
 >
 > [中文 README](./README.md)
 
@@ -203,5 +203,5 @@ Rule text: do whatever you want, no warranty — this is my personal workflow, n
 If this rule system inspires yours, the repo lives at:
 
 ```
-https://github.com/yiyang774/claude-ops
+https://github.com/yiyang774/scriptorium
 ```
