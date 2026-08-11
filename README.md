@@ -12,14 +12,14 @@
 
 `~/.claude/` 的**规则本体**,不含运行时数据。
 
-包含 56 个文件,按目录:
+包含 59 个文件,按目录:
 
 | 目录 | 文件数 | 内容 |
 |---|---|---|
 | `ops/` | 14 | 各硬门槛的细则(唯一事实源,不得凭记忆拼命令) |
 | `hooks/` | 13 | 强制执行层(PreToolUse / Stop / SessionStart 等 hook 脚本) |
 | `workflows/` | 9 | 工作流脚本(`deep-research.js`、`finding-loop/` Python 模块、`_retired/` 退役件) |
-| `docs/` | 8 | `docs/superpowers/{journal,plans,specs}/` 里的历史任务档案(留作范例) |
+| `docs/` | 11 | `docs/superpowers/{journal,plans,specs}/` 里的历史任务档案(留作范例) |
 | `bin/` | 5 | 命令行小工具(`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
 | `agents/` | 1 | 目前只有 `fable-readonly-advisor.md`(Fable5 顾问的 subagent 定义) |
 | 顶层 | 6 | `CLAUDE.md`(13 铁律 + 4 章分层)、`README.md` / `README.en.md`、`RTK.md`、`settings.json`、`.gitignore` |
@@ -97,7 +97,7 @@ ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(空,你要自己攒)"
 
 - ✅ 会话正常起(env 段的 token / base URL 通了)
 - ✅ 没被 hook 拦(所有 hook 脚本路径都对)
-- ✅ `Skill` 工具可见 `brainstorming` / `plan` / `spec` 等(marketplace 段拉到了)
+- ✅ `Skill` 工具可见 **`interview-me`**、`brainstorming`、`plan`、`spec` 等——**其中 `interview-me` 是所有编码/研究任务的第一步硬依赖**,缺则规划段无法启动;它由 Addy 的 `agent-skills` marketplace 分发,若这条对不上,先检查 `enabledPlugins` 里 `agent-skills@addy-agent-skills` 是否为 true
 
 三条都对就装好了。
 
@@ -145,12 +145,15 @@ ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(空,你要自己攒)"
 ④ 原型快审(跨家族;作者是 codex 时由 Claude 审,advisory)
 ⑤ 真跑 → runs/YYYY-MM-DD-<slug>-<候选>/
 ⑥ 互盲分析(⑥A Codex sol ultra 证据账本 ‖ ⑥B Claude 全新上下文独立审阅)
-⑦ L0 亲自核原始数据 → 形成分歧清单 → 写 spec/plan
+⑦ L0 定案(拆三小步):
+   ⑦A 亲自核原始数据 → 形成分歧清单
+   ⑦B 强制 interview-me 意图对齐(无条件) → 固化意图/偏好/非目标 + 处置意向(选其一/合成/全部不选/停止/补测)
+   ⑦C 按 ⑦B 处置意向分支执行(只有"选其一/合成"才写 spec/plan 进 ⑧)
 ⑧ Plan-Gate(硬门槛,与标准流水线同款 sol ultra 四维单审)
 ⑨ 生产化六步协议 → PR-GATE
 ```
 
-窄例外:① 共享测量代码与 ③ 候选原型允许在 Gate 前派活(四条边界全中才成立,`ops/empirical-flow.md` §2③ 有对照表)——**探测可以先派,交付不能先派**;⑦ 后的生产化 spec/plan 仍须过 ⑧ 才能派实现。
+窄例外:① 共享测量代码与 ③ 候选原型允许在 Gate 前派活(四条边界全中才成立,`ops/empirical-flow.md` §2③ 有对照表)——**探测可以先派,交付不能先派**;⑦C 后的生产化 spec/plan 仍须过 ⑧ 才能派实现。
 
 ## 分层结构
 
@@ -181,7 +184,7 @@ L0 收口(读 L3 → 逐条核验 → 拍板)
 | `[DELEGATION-BAND]` | 单次委派实现代码 ≤400 目标线、≤600 硬上限(测试不计) | 每次派活 / L0 自己动手 |
 | `[GRANT-PERMISSIONS]` | 一次给足权限;审查者只读 | 每次调 codex / subagent |
 | `[DIAGNOSE-FAILURE]` | 失败要诊断,别盲目重试——先定位,再改简报/升层/接管 | 任何一层产出差时 |
-| `[SKILL-PIPELINE]` | 写代码/研究前必先 `brainstorming` | 任何编码或研究任务 |
+| `[SKILL-PIPELINE]` | 规划段(仅 L0/活跃用户):`interview-me`(无条件)→ `brainstorming` → `writing-plans`(brainstorming 唯一后继,不用 plan/spec 替代);执行段(可派子代理):`test`/TDD → `build` → `review` → `ship` | 任何编码或研究任务 |
 | `[PR-GATE]` | GitHub 改动只开 PR、必过 Codex 终检 | 任何要进 GitHub 的改动 |
 | `[PRIMARY-SOURCE]` | 需要原文支撑的外部取材必须走 codex,`WebSearch` 摘要禁止当原文 | 任何引用外部资料 |
 | `[PLAIN-LANGUAGE]` | 别自创高浓度词汇 | 面向人的输出 |
@@ -275,17 +278,18 @@ codegraph explore "<问题或符号名>"  # 逐字源码 + 调用路径
 
 ## 用起来大概长啥样
 
-标准流水线一次典型任务(实证流的 ①–⑦ 见上一节;⑧ 起走本节的 3 步之后):
+标准流水线一次典型任务(实证流的 ①–⑦ 见上一节;⑧ 起走本节的第 4 步之后):
 
-1. `brainstorming` skill 聊清意图 → 拿到用户认可(HARD-GATE,没认可不写一行代码)
-2. `spec` + `plan` skill 拆任务,给验收标准
-3. **Plan-Gate**(单进程 sol ultra 四维单审 + 有罪推定):按 `ops/plan-gate.md` 里的完整脚本发起;NO-GO 意见交给 L0 分诊——**go/no-go 归 L0**(异议若确属误报可书面放行;非致命异议自行取舍)
-4. 派 L1(默认 codex luna;强耦合改动 → Sonnet 5;机械批量 → Haiku 4.5),简报自包含 + 显式全权授权 + 逐字带上"环境与威胁模型"段(`ops/plan-gate.md` §🔻)
-5. L1 落地(先 `test` 写失败测试 → `build` 小步实现 → `review` 作者自检)
-6. **L2 快审**(便宜的跨家族粗筛,fail 不阻断,不能替代 L3;见 `ops/l2.md`)
-7. **L3 终检**:按 `ops/plan-gate.md` 里的调用形态,例如 `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
-8. L0 分诊 → 逐条修 → **对【最终态】再跑一次 L3**(移动靶陷阱,§2.6;逐轮 GO 只对当轮的移动靶成立,不等于最终状态正确)→ 冻结态 L3 通过后由 **L0 拍板**
-9. 要进 GitHub:先读 `ops/pr-merge.md` → `gh pr create` → codex 审 PR + head/base 双 OID 绑定 + 工作区纯净三闸 → 合并前重取远端 OID 与留痕逐一比对 → 由**用户本人**执行合并(L0 只给 go/no-go 建议,自己绝不跑 `gh pr merge`)
+1. `interview-me` skill(无条件)一问一答挖清意图/偏好/非目标——L0/活跃用户上下文专属
+2. `brainstorming` skill 依 interview 结果聊到候选方案 → 拿到用户认可(HARD-GATE,没认可不写一行代码)
+3. `writing-plans` skill 拆任务,给验收标准(按 brainstorming 唯一后继契约,不用替代 skill)
+4. **Plan-Gate**(单进程 sol ultra 四维单审 + 有罪推定):按 `ops/plan-gate.md` 里的完整脚本发起,输入含 `intent.txt`(interview 后用户确认的意图/裁定,权威解释源);NO-GO 意见交给 L0 分诊——**go/no-go 归 L0**(异议若确属误报可书面放行;非致命异议自行取舍)
+5. 派 L1(默认 codex luna;强耦合改动 → Sonnet 5;机械批量 → Haiku 4.5),简报自包含 + 显式全权授权 + 逐字带上"环境与威胁模型"段(`ops/plan-gate.md` §🔻)
+6. L1 落地(执行段:先 `test` 写失败测试 → `build` 小步实现 → `review` 作者自检——TDD 顺序不得倒置)
+7. **L2 快审**(便宜的跨家族粗筛,fail 不阻断,不能替代 L3;见 `ops/l2.md`)
+8. **L3 终检**:按 `ops/plan-gate.md` 里的调用形态,例如 `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
+9. L0 分诊 → 逐条修 → **对【最终态】再跑一次 L3**(移动靶陷阱,§2.6;逐轮 GO 只对当轮的移动靶成立,不等于最终状态正确)→ 冻结态 L3 通过后由 **L0 拍板**
+10. 要进 GitHub:先读 `ops/pr-merge.md` → `gh pr create` → codex 审 PR + head/base 双 OID 绑定 + 工作区纯净三闸 → 合并前重取远端 OID 与留痕逐一比对 → 由**用户本人**执行合并(L0 只给 go/no-go 建议,自己绝不跑 `gh pr merge`)
 
 ## 谁能用
 
@@ -298,7 +302,7 @@ codegraph explore "<问题或符号名>"  # 逐字源码 + 调用路径
 1. 用户名不同就全局改路径(或改成 `$HOME`)
 2. `settings.json` 里的 token / base URL 是我的私人代理路由,你要换成自己的
 3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` 是我本地代理暴露的模型名,你环境里名字可能不一样
-4. 本仓库**不含 skill 包**——`CLAUDE.md` 明确提到的 skill 名(`brainstorming`、`spec`、`plan`、`build`、`incremental-implementation`、`test`、`review`、`ship`、`systematic-debugging`、`debugging`、`writing-plans`、`dispatching-parallel-agents`、`using-agent-skills`、`using-superpowers`)由 `settings.json` 的 `enabledPlugins` / `extraKnownMarketplaces` 段列出的 marketplace 分发——Addy 的 `agent-skills`、`superpowers-marketplace`、`openai-codex`、`ralph-loop`。若你有其他本地私有 skill 想接进来,自己配 marketplace 或 symlink 即可,本仓库不提供
+4. 本仓库**不含 skill 包**——`CLAUDE.md` 明确提到的 skill 名(`interview-me`、`brainstorming`、`spec`、`plan`、`build`、`incremental-implementation`、`test`、`review`、`ship`、`systematic-debugging`、`debugging`、`writing-plans`、`dispatching-parallel-agents`、`using-agent-skills`、`using-superpowers`)由 `settings.json` 的 `enabledPlugins` / `extraKnownMarketplaces` 段列出的 marketplace 分发——Addy 的 `agent-skills`(含 `interview-me`)、`superpowers-marketplace`、`openai-codex`、`ralph-loop`。若你有其他本地私有 skill 想接进来,自己配 marketplace 或 symlink 即可,本仓库不提供
 
 ## 授权
 

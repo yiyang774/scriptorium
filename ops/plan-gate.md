@@ -117,10 +117,11 @@ GUARD="你是对抗式审查者,有罪推定。逐个维度给结论,每条问�
 ## 维度④拆解质量      —— 切分遗漏/依赖顺序/验收标准可证伪性/有无子任务做不了
 全部结论输出完毕后,把 $SENTINEL 单独打印在最后一行。"
 [[ -s "$GATE/in/request.txt" ]] || { echo "✗ request.txt 缺失/为空,阻断(没有用户原话就判不出需求误解)"; exit 1; }
+[[ -s "$GATE/in/intent.txt" ]] || { echo "✗ intent.txt 缺失/为空,阻断(interview-me 后用户确认的意图/裁定是权威解释源,缺则会按初始原话误判需求)"; exit 1; }
 [[ -s "$GATE/in/spec.txt" ]] || { echo "✗ spec.txt 缺失/为空,阻断"; exit 1; }
 PLAN_TXT=""; [[ -s "$GATE/in/plan.txt" ]] && PLAN_TXT="$(cat "$GATE/in/plan.txt")"
-printf '%s\n\n=== 用户原始要求(权威意图源)===\n%s\n\n=== spec ===\n%s\n\n=== plan ===\n%s\n' \
-  "$GUARD" "$(cat "$GATE/in/request.txt")" "$(cat "$GATE/in/spec.txt")" \
+printf '%s\n\n=== 用户初始原话(轨迹起点)===\n%s\n\n=== 用户确认的最终意图/裁定(权威解释源;interview-me 后固化)===\n%s\n\n=== spec ===\n%s\n\n=== plan ===\n%s\n\n注:两处冲突时以【用户确认的最终意图/裁定】为准;初始原话仅用于核查演变是否有依据。\n' \
+  "$GUARD" "$(cat "$GATE/in/request.txt")" "$(cat "$GATE/in/intent.txt")" "$(cat "$GATE/in/spec.txt")" \
   "${PLAN_TXT:-(plan 尚未产出,本轮只审 spec;plan 成文后须补审)}" \
 | codex exec --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="ultra" -s read-only \
     -C "$GATE/gate" -o "$GATE/gate/out.txt" -

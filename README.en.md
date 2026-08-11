@@ -10,14 +10,14 @@ A rule system that keeps Claude Code from concluding "should work" when doing en
 
 The **rule body** of my `~/.claude/`, no runtime data.
 
-56 files, by directory:
+59 files, by directory:
 
 | Directory | Files | Content |
 |---|---|---|
 | `ops/` | 14 | One source of truth for each hard gate (never reconstruct commands from memory) |
 | `hooks/` | 13 | The enforcement layer (PreToolUse / Stop / SessionStart hook scripts) |
 | `workflows/` | 9 | Workflow scripts (`deep-research.js`, the `finding-loop/` Python module, `_retired/`) |
-| `docs/` | 8 | Historical task archives under `docs/superpowers/{journal,plans,specs}/` (kept as examples) |
+| `docs/` | 11 | Historical task archives under `docs/superpowers/{journal,plans,specs}/` (kept as examples) |
 | `bin/` | 5 | CLI helpers (`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
 | `agents/` | 1 | Currently only `fable-readonly-advisor.md` (Fable5 advisor subagent definition) |
 | top level | 6 | `CLAUDE.md` (13 iron laws + 4 chapters), `README.md` / `README.en.md`, `RTK.md`, `settings.json`, `.gitignore` |
@@ -96,7 +96,7 @@ Start a `claude` session, ask something like "what's the current working directo
 
 - ✅ Session starts normally (the `env` token / base URL are reachable)
 - ✅ No hook blocks (every hook script path resolves)
-- ✅ The `Skill` tool sees `brainstorming` / `plan` / `spec` etc. (marketplace fetched)
+- ✅ The `Skill` tool sees **`interview-me`**, `brainstorming`, `plan`, `spec` etc. — **`interview-me` is the first hard-step dependency for every coding/research task**, missing it means the planning segment cannot start; it's distributed by Addy's `agent-skills` marketplace, so if this check fails first verify that `enabledPlugins` has `agent-skills@addy-agent-skills: true`
 
 Three checks green → installed.
 
@@ -144,7 +144,10 @@ Route the task first. One-line test: **could I build two versions, run them, and
 ④ Prototype quick review (cross-family; if the author is codex, Claude reviews; advisory)
 ⑤ Actually run → runs/YYYY-MM-DD-<slug>-<candidate>/
 ⑥ Blind analysis (⑥A Codex sol ultra evidence ledger ‖ ⑥B Claude fresh-context independent review)
-⑦ L0 personally reads raw data → forms disagreement list → writes spec/plan
+⑦ L0 makes the call (three sub-steps):
+   ⑦A personally read raw data → form the disagreement list
+   ⑦B mandatory `interview-me` intent alignment (unconditional) → fix intent/preferences/non-goals + a disposition intent (pick-one / synthesize / all-rejected / stop / retest)
+   ⑦C branch-execute per ⑦B's disposition (only "pick-one / synthesize" writes spec/plan and enters ⑧)
 ⑧ Plan-Gate (hard gate, same sol-ultra four-dimension single review as standard pipeline)
 ⑨ Six-step productization protocol → PR-GATE
 ```
@@ -155,7 +158,7 @@ Route the task first. One-line test: **could I build two versions, run them, and
 
 ⚠️ **Steps ⑥/⑦ have a hard requirement: model reports are only advisory, L0 must personally read the raw data** — don't just copy ⑥A/⑥B's conclusions. Even a fully-executed nine-step flow **cannot eliminate shared blind spots** (common metric definitions, shared measurement code, thinking patterns common to a model family); after ⑨ productization, run L2/L3 on the same hash and rerun tests + review on any substantive change.
 
-Narrow exception: ① shared measurement code and ③ candidate prototypes may be dispatched before Gate (only when all four boundary conditions hold; see the comparison table in `ops/empirical-flow.md` §2③) — **probing may run early, delivery may not**; the productized spec/plan from ⑦ still has to pass ⑧ before implementation can be dispatched.
+Narrow exception: ① shared measurement code and ③ candidate prototypes may be dispatched before Gate (only when all four boundary conditions hold; see the comparison table in `ops/empirical-flow.md` §2③) — **probing may run early, delivery may not**; the productized spec/plan from ⑦C still has to pass ⑧ before implementation can be dispatched.
 
 ## Layered structure
 
@@ -186,7 +189,7 @@ L0 closes (read L3 → verify each item → call it)
 | `[DELEGATION-BAND]` | Single delegation ≤400 LOC target, ≤600 hard cap (implementation code; tests excluded) | Every delegation / when L0 codes directly |
 | `[GRANT-PERMISSIONS]` | Grant enough permissions in one shot; reviewers stay read-only | Every codex / subagent call |
 | `[DIAGNOSE-FAILURE]` | Diagnose failures before retrying — locate the cause, then rewrite the brief / escalate / take over | Any tier producing poor output |
-| `[SKILL-PIPELINE]` | Coding/research always starts with `brainstorming` | Any coding or research task |
+| `[SKILL-PIPELINE]` | Planning segment (L0 / active user only): `interview-me` (unconditional) → `brainstorming` → `writing-plans` (brainstorming's sole successor; do not substitute plan/spec); Execution segment (subagents allowed): `test`/TDD → `build` → `review` → `ship` | Any coding or research task |
 | `[PR-GATE]` | GitHub changes go through PR only, must pass Codex final review | Any change destined for GitHub |
 | `[PRIMARY-SOURCE]` | External material that needs an original source must go through codex; `WebSearch` snippets are never quotable as source | Any external citation |
 | `[PLAIN-LANGUAGE]` | Don't coin dense jargon | Any human-facing output |
@@ -278,17 +281,18 @@ Beyond hard gates and hooks, the rule system also dictates what L0 **must rememb
 
 ## What a run looks like
 
-A standard-pipeline typical task (empirical flow ①–⑦ see the earlier section; from ⑧ onward, resume with steps 3 onward below):
+A standard-pipeline typical task (empirical flow ①–⑦ see the earlier section; from ⑧ onward, resume with step 4 onward below):
 
-1. `brainstorming` skill to clarify intent → get user approval (HARD-GATE: no approval, no code)
-2. `spec` + `plan` skill to split with explicit acceptance criteria
-3. **Plan-Gate** (single sol-ultra process, four-dimension single review, presumption of guilt): fire it via the complete script in `ops/plan-gate.md`; NO-GO items go to L0 for triage — **go/no-go belongs to L0** (an objection verified as a false positive may be released with a written reason; non-critical suggestions are L0's call)
-4. Delegate to L1 (default codex luna; deeply coupled changes → Sonnet 5; mechanical batch → Haiku 4.5), self-contained brief + explicit permission grant + verbatim inclusion of the "environment and threat model" block from `ops/plan-gate.md` §🔻
-5. L1 implements (start with `test` writing a failing test → `build` incremental implementation → `review` author self-check)
-6. **L2 quick review** (cheap cross-family coarse pass, fail-non-blocking, cannot replace L3; see `ops/l2.md`)
-7. **L3 final review**: use the call form in `ops/plan-gate.md`, e.g. `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
-8. L0 triages → fixes each item → **re-run L3 on the FROZEN final state** (moving-target trap, §2.6; a GO on each round only holds for that round's moving target, not for the final state) → after frozen-state L3 passes, **L0 calls it**
-9. To land on GitHub: read `ops/pr-merge.md` first → `gh pr create` → codex reviews the PR + head/base dual-OID binding + clean-worktree three-gate → re-fetch remote OIDs and match against the paper trail before merge → **the user (not L0) performs the merge** (L0 only issues a go/no-go recommendation and never runs `gh pr merge`)
+1. `interview-me` skill (unconditional) — one-question-at-a-time to extract intent/preferences/non-goals; L0/active-user context only
+2. `brainstorming` skill — take interview output, converge to a candidate design → get user approval (HARD-GATE: no approval, no code)
+3. `writing-plans` skill to split with explicit acceptance criteria (per brainstorming's sole-successor contract, do NOT substitute other plan/spec skills)
+4. **Plan-Gate** (single sol-ultra process, four-dimension single review, presumption of guilt): fire it via the complete script in `ops/plan-gate.md`, inputs include `intent.txt` (the user-confirmed intent/adjudication after interview, authoritative interpretation source); NO-GO items go to L0 for triage — **go/no-go belongs to L0** (an objection verified as a false positive may be released with a written reason; non-critical suggestions are L0's call)
+5. Delegate to L1 (default codex luna; deeply coupled changes → Sonnet 5; mechanical batch → Haiku 4.5), self-contained brief + explicit permission grant + verbatim inclusion of the "environment and threat model" block from `ops/plan-gate.md` §🔻
+6. L1 implements (execution segment: `test` writing a failing test → `build` incremental implementation → `review` author self-check — TDD order must not be inverted)
+7. **L2 quick review** (cheap cross-family coarse pass, fail-non-blocking, cannot replace L3; see `ops/l2.md`)
+8. **L3 final review**: use the call form in `ops/plan-gate.md`, e.g. `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
+9. L0 triages → fixes each item → **re-run L3 on the FROZEN final state** (moving-target trap, §2.6; a GO on each round only holds for that round's moving target, not for the final state) → after frozen-state L3 passes, **L0 calls it**
+10. To land on GitHub: read `ops/pr-merge.md` first → `gh pr create` → codex reviews the PR + head/base dual-OID binding + clean-worktree three-gate → re-fetch remote OIDs and match against the paper trail before merge → **the user (not L0) performs the merge** (L0 only issues a go/no-go recommendation and never runs `gh pr merge`)
 
 ## Who can use this
 
@@ -301,7 +305,7 @@ To reuse cross-machine:
 1. A different username means rewriting paths (or switching them to `$HOME`)
 2. `settings.json` has my personal proxy tokens and base URLs — replace with your own
 3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` are model names exposed by my local proxy — the names in your environment will differ
-4. This repo **does not ship skill packs** — the skills explicitly mentioned in `CLAUDE.md` (`brainstorming`, `spec`, `plan`, `build`, `incremental-implementation`, `test`, `review`, `ship`, `systematic-debugging`, `debugging`, `writing-plans`, `dispatching-parallel-agents`, `using-agent-skills`, `using-superpowers`) are distributed by the marketplaces listed under `enabledPlugins` / `extraKnownMarketplaces` in `settings.json` — Addy's `agent-skills`, `superpowers-marketplace`, `openai-codex`, `ralph-loop`. If you have other private local skills to wire in, configure your own marketplace or symlink; this repo does not provide them
+4. This repo **does not ship skill packs** — the skills explicitly mentioned in `CLAUDE.md` (`interview-me`, `brainstorming`, `spec`, `plan`, `build`, `incremental-implementation`, `test`, `review`, `ship`, `systematic-debugging`, `debugging`, `writing-plans`, `dispatching-parallel-agents`, `using-agent-skills`, `using-superpowers`) are distributed by the marketplaces listed under `enabledPlugins` / `extraKnownMarketplaces` in `settings.json` — Addy's `agent-skills` (which contains `interview-me`), `superpowers-marketplace`, `openai-codex`, `ralph-loop`. If you have other private local skills to wire in, configure your own marketplace or symlink; this repo does not provide them
 
 ## License
 

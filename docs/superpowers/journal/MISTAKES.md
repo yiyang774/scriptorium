@@ -204,3 +204,27 @@
 - **诚实澄清**：本任务前 5 次 push（`6fe15de` / `186767d` / `6ac946f` / `5697f18` / `4d9b5f9`）
   在 journal 事件流里被记为"`GUARD_OFF=1` 单次 env-var、零残留"，其实机制是这个 hook 漏洞。
   push 本身按用户授权是合法的，机制描述则是错的。此条留档以纠正记忆。
+
+## [E007] 2026-08-11 · 规则文件涉及 skill 调用时,没读 skill 原文就写规则
+
+- **有效性**:active
+- **处置**:未修复(规则文件本身不需要工具修;等未来任务真触发时,派活前扫本条即可)
+- **触发场景**:改 `CLAUDE.md` / `ops/empirical-flow.md` 等规则文件,内容涉及"调用某 skill"、"skill 的产出是什么"、"skill 的适用范围"时,凭记忆或推测写。本次 interview-me 规则任务连续三轮 L3 都逮出此类:round-1 #2(brainstorming 与 interview-me 顺序冲突,因未读 skill 契约),round-2 #2(interview-me 禁在非交互子代理上下文),round-3 #2(brainstorming 唯一后继 writing-plans 契约不允许替代 skill)。三轮都是同一根因。
+- **正确做法**:改规则前,`Read` 涉及的每个 skill 的 `SKILL.md` 原文——特别看它的"When to use / When NOT" 段、"输出契约"段、"唯一后继"或"下一步"段。skill 路径通常在 `~/.claude/plugins/cache/<marketplace>/<pkg>/<ver>/skills/<name>/SKILL.md` 或 `~/.claude/plugins/marketplaces/<marketplace>/skills/<name>/SKILL.md`。**报告里凡引用 skill 契约的措辞,必须一手引自 SKILL.md 那一行,标出文件路径 + 行号**。这与 `[PRIMARY-SOURCE]`(codex 报告是二手,须回一手工件)是同一类要求:此处 SKILL.md 就是一手。
+- **判据(简报里写这句)**:"改的规则里如果出现 skill 名字,先 Read 它的 SKILL.md"。
+
+## [E008] 2026-08-11 · journal 追加位置没读 `ops/journal.md` 就沿用 hook 兜底位置
+
+- **有效性**:active
+- **处置**:已修复(本次任务的 journal 已迁到正规位置,旧位置留了历史指针;下次任务应从建档起就正规位置)
+- **触发场景**:任务过程中要记 journal 事件,直接追加到 hook `journal-sessionstart.sh` 自动创建的 `projects/-<host>/journal/YYYY-MM-DD-<slug>.md`。**这是错的**——那个 hook 的兜底文件在**顶层 `.gitignore` 的 `projects/`** 里,留痕不入版本历史。ops/journal.md 明规:项目内 `docs/superpowers/journal/`,slug 与 spec/plan 对齐。2026-08-11 interview-me 规则任务 L3 round-1 #3 逮出。
+- **正确做法**:命中 `ops/journal.md` §8 "何时建"的任一条 → **先 `Read ~/.claude/ops/journal.md`** → 按 §11 建到 `<项目>/docs/superpowers/journal/YYYY-MM-DD-<kebab-slug>.md`(slug 锚定任务,与 spec/plan 对齐,同一任务永远追加同一份)。若发现已错追加到旧位置:**旧位置只追加"位置纠错指针",建新位置**——只追加不改写历史(否则失去证据价值)。
+- **判据(简报里写这句)**:"要记 journal 事件之前,先 `Read ~/.claude/ops/journal.md` 定位置"。
+
+## [E009] 2026-08-11 · 用户明示豁免 Plan-Gate + 扩展 L3 兜底,承接效率显著低于 Plan-Gate 前置
+
+- **有效性**:active
+- **处置**:未修复(本条是策略性教训,不修 spec/plan/规则,写入 MISTAKES 供未来同类任务派活前扫)
+- **触发场景**:规则文件变更类任务,用户明示豁免 Plan-Gate 走扩展 L3 兜底(CLAUDE.md §2.2 三件事的合规豁免路径)。本次 interview-me 任务实证代价:走扩展 L3 → 4 轮 L3(round-1 4 致命 / round-2 5 致命 / round-3 5 项必修 / round-4 5 项致命)+ 4 版 rev(rev-1 → rev-4);每轮都逮真问题、每次 rev 都引入下一轮的新问题。若走 Plan-Gate 前置,估计 1-2 轮 sol ultra 就能拦下大部分方向性/契约冲突/跨文件一致性问题。原因:落地后审的 sunk cost 更高、修法是补丁式、易漏跨文件镜像;Plan-Gate 前置审 spec/plan 时改动便宜、且四维单审天然覆盖跨文件一致性视角。
+- **正确做法**:**规则文件变更、跨文件同步类任务默认走 Plan-Gate 前置,不走豁免**。若用户明示要豁免,L0 应主动提醒本条实测代价("上次同类走豁免用了 4 轮 L3、4 版 rev,而 Plan-Gate 前置估计 1-2 轮就能收")并请用户确认;豁免仍是用户权利,但应知情选择。豁免走后必须严格按 §2.2 三件事(声明 + journal 留痕 + 扩展 L3)全做齐。
+- **判据(简报里写这句)**:"用户明示豁免 Plan-Gate 之前,先讲清 E009 实测代价"。
