@@ -1,316 +1,319 @@
 # Scriptorium
 
-> 一套 Claude Code 的规约体系 —— L0 派活 · L1 执行 · L2 快审 · L3 终检;逐层背书,字字有据
-> 
-> 可以依据此规则修改 Codex （AGENT.md）
+> A rule system for Claude Code — L0 dispatches, L1 executes, L2 pre-checks, L3 finalizes; every claim copied, checked, and countersigned.
 >
-> [English README](./README.en.md)
+> [中文 README](./README.zh.md)
 
-一套让 Claude Code 在做工程与研究任务时不再凭"应该没问题"下结论的规则体系。核心思路一句话:**L0 主循环当大脑,不当手**——只做思考、规划、监督、收口; 脏活累活按层级派给更便宜或更对口的模型,最后由 L0 拿证据拍板。
+A rule system that keeps Claude Code from concluding "should work" when doing engineering or research tasks. Core idea in one line: **L0 is the brain, not the hands** — the main loop only thinks, plans, supervises, and closes; the grunt work goes to cheaper or better-suited models by tier, and L0 makes the final call with actual evidence in hand.
 
-## 这仓库是什么
+## What this repo is
 
-`~/.claude/` 的**规则本体**,不含运行时数据。
+The **rule body** of my `~/.claude/`, no runtime data.
 
-包含 59 个文件,按目录:
+59 files, by directory:
 
-| 目录 | 文件数 | 内容 |
+| Directory | Files | Content |
 |---|---|---|
-| `ops/` | 14 | 各硬门槛的细则(唯一事实源,不得凭记忆拼命令) |
-| `hooks/` | 13 | 强制执行层(PreToolUse / Stop / SessionStart 等 hook 脚本) |
-| `workflows/` | 9 | 工作流脚本(`deep-research.js`、`finding-loop/` Python 模块、`_retired/` 退役件) |
-| `docs/` | 11 | `docs/superpowers/{journal,plans,specs}/` 里的历史任务档案(留作范例) |
-| `bin/` | 5 | 命令行小工具(`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
-| `agents/` | 1 | 目前只有 `fable-readonly-advisor.md`(Fable5 顾问的 subagent 定义) |
-| 顶层 | 6 | `CLAUDE.md`(13 铁律 + 4 章分层)、`README.md` / `README.en.md`、`RTK.md`、`settings.json`、`.gitignore` |
+| `ops/` | 14 | One source of truth for each hard gate (never reconstruct commands from memory) |
+| `hooks/` | 13 | The enforcement layer (PreToolUse / Stop / SessionStart hook scripts) |
+| `workflows/` | 9 | Workflow scripts (`deep-research.js`, the `finding-loop/` Python module, `_retired/`) |
+| `docs/` | 11 | Historical task archives under `docs/superpowers/{journal,plans,specs}/` (kept as examples) |
+| `bin/` | 5 | CLI helpers (`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
+| `agents/` | 1 | Currently only `fable-readonly-advisor.md` (Fable5 advisor subagent definition) |
+| top level | 6 | `CLAUDE.md` (13 iron laws + 4 chapters), `README.md` (English, primary) / `README.zh.md` (Chinese), `RTK.md`, `settings.json`, `.gitignore` |
 
-**不包含**:`projects/`(会话数据)、`plugins/`(缓存)、`backups/`、`sessions/`、`tasks/`、机器本地覆写(`settings.local.json`)——这些属运行时数据,永不入库(见 `.gitignore`)。
+**Not included**: `projects/` (session data), `plugins/` (cache), `backups/`, `sessions/`, `tasks/`, machine-local overrides (`settings.local.json`) — all runtime, never committed (see `.gitignore`).
 
-## 怎么装
+## Installation
 
-⚠️ **先读"[谁能用](#谁能用)"节**——这套规则默认单机单用户、路径写死 `/Users/macbookpro/...`、`settings.json` 里带我个人的代理 token 与本地代理暴露的模型名(`gpt-5.6-sol` / `gpt-5.6-luna` / `claude-fable-5` 等)。**你不会开箱即用**,需要按下面步骤替换。
+⚠️ **Read "[Who can use this](#who-can-use-this)" first.** These rules default to single-machine single-user use, paths are hardcoded to `/Users/macbookpro/...`, and `settings.json` carries my personal proxy tokens plus model names exposed by my local proxy (`gpt-5.6-sol` / `gpt-5.6-luna` / `claude-fable-5` etc.). **It won't work out of the box** — follow the steps below to replace.
 
-### 一、前置
+### 1. Prerequisites
 
-必须装好:
+Required:
 
-- **Claude Code**(CLI 本体)——本机 `claude` 命令可用
-- **git**、**bash**(macOS 自带 3.2 够用,但 Plan-Gate 脚本已按 3.2 兼容写)、**python3**(hook 里用)
+- **Claude Code** (the CLI itself) — the `claude` command must be on `PATH`
+- **git**, **bash** (macOS's default 3.2 is fine — the Plan-Gate script is written to be 3.2-compatible), **python3** (used inside hooks)
 
-按需装好(缺哪个对应功能就用不了):
+Optional (each unlocks a specific capability):
 
-- **`codex` CLI**——Plan-Gate、L3 终检、`[PRIMARY-SOURCE]` 原文取材都要它;没有的话 frontier 审查这一层直接坍掉
-- **`gh` CLI**——`[PR-GATE]` 走 `gh pr create` / `gh pr merge`;没有就只能手工开 PR
-- **`codegraph` CLI**——`impact` / `callers` / `callees` 三个命令(MCP 只暴露 `explore`);见"代码定位与影响面"节。**不装也能用,只是失去共用函数波及面分析**
-- **`rtk`**——命令代理,60–90% token 节省;`settings.json` 的 PreToolUse hook 里挂了 `rtk hook claude`,**没装 hook 会静默跳过这一条**,规则本身不依赖它
+- **`codex` CLI** — required by Plan-Gate, L3 final review, and `[PRIMARY-SOURCE]` original-text retrieval; without it the entire frontier-review tier collapses
+- **`gh` CLI** — `[PR-GATE]` runs `gh pr create` / `gh pr merge`; without it you'll be opening PRs manually
+- **`codegraph` CLI** — the `impact` / `callers` / `callees` commands (MCP only exposes `explore`); see "Code location and blast radius". **Not required to run, you'll just lose shared-function blast-radius analysis**
+- **`rtk`** — command proxy for 60–90% token savings; `settings.json`'s PreToolUse hook has `rtk hook claude` wired in, and **the hook silently no-ops if `rtk` is missing**. The rule system itself doesn't depend on it
 
-### 二、拉仓 + 装到位
+### 2. Clone into place
 
 ```bash
-# 1. 备份现有 ~/.claude(如果有的话)——里面可能有你自己的会话/token,别覆盖掉
+# 1. Back up any existing ~/.claude (it may hold your own sessions/tokens — don't overwrite)
 mv ~/.claude ~/.claude.backup.$(date +%Y%m%d)
 
-# 2. Clone 到目标位置
+# 2. Clone to the target location
 git clone https://github.com/yiyang774/scriptorium.git ~/.claude
 cd ~/.claude
 ```
 
-### 三、必改项(不改就跑不起来或会用错帐号)
+### 3. What you MUST change (skipping any of these breaks the install or uses the wrong account)
 
-**1. 路径**:全仓 grep 一下写死的绝对路径,换成你自己的:
+**1. Paths**: grep the whole tree for hardcoded absolutes and replace with your own:
 
 ```bash
 grep -rn "/Users/macbookpro" ~/.claude --include="*.sh" --include="*.py" --include="*.md" --include="*.json"
 ```
 
-主要在 `settings.json`(hook 命令的绝对路径)、hooks/*.sh、bin/* 里;数量不多,机械替换成你的 `$HOME`(能用变量的地方用变量)。
+Most hits are in `settings.json` (absolute paths for hook commands), `hooks/*.sh`, and `bin/*`; the count is small — mechanical substitute your `$HOME` (use the variable wherever the file allows it).
 
-**2. `settings.json` 的 `env` 段**:里面的 `ANTHROPIC_AUTH_TOKEN` 和 `ANTHROPIC_BASE_URL` 是**我的私人代理路由**,你必须换成:
+**2. `settings.json` `env` block**: the `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` are **my personal proxy route** — you must replace with either:
 
-- 官方 Anthropic API:删掉整个 `ANTHROPIC_BASE_URL`,`ANTHROPIC_AUTH_TOKEN` 换成你的 API key
-- 或换成你自己的代理
+- Official Anthropic API: delete `ANTHROPIC_BASE_URL` entirely, put your API key in `ANTHROPIC_AUTH_TOKEN`
+- Or your own proxy
 
-**3. 模型名**:`ANTHROPIC_DEFAULT_*_MODEL` 与 `inferenceModels` / `models` 列表里 `claude-zyy00/*`、`tuzi-*` 都是我本地代理暴露的名字。用官方 API 的话:
+**3. Model names**: `ANTHROPIC_DEFAULT_*_MODEL` and the `inferenceModels` / `models` list contain `claude-zyy00/*` and `tuzi-*` — all names exposed by my local proxy. On official API:
 
-- `ANTHROPIC_DEFAULT_OPUS_MODEL` → `claude-opus-5` 之类官方 ID
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` → an official ID like `claude-opus-5`
 - `ANTHROPIC_DEFAULT_SONNET_MODEL` → `claude-sonnet-5`
-- 其它同理,或者整段删掉走默认
+- Same idea for the rest, or delete the block and use defaults
 
-**4. Codex 侧模型名**:`CLAUDE.md` 与 `ops/plan-gate.md`、`ops/l2.md` 里通篇写着 `gpt-5.6-sol` / `gpt-5.6-luna` —— 这也是本地代理名。你要么按 `~/.codex/config.toml` 里你实际能调的模型名重命名(全局搜索替换),要么改成 `gpt-5.5` / `gpt-5-mini` 一类 codex 官方模型 ID。**这一步不做,Plan-Gate 与 L3 全部报"unknown model"**。
+**4. Codex-side model names**: `CLAUDE.md`, `ops/plan-gate.md`, and `ops/l2.md` all write `gpt-5.6-sol` / `gpt-5.6-luna` throughout — also local-proxy names. Either rename them (global search-replace) to match what your `~/.codex/config.toml` actually exposes, or switch to codex-official IDs like `gpt-5.5` / `gpt-5-mini`. **Skip this and Plan-Gate + L3 will both return "unknown model"**.
 
-**5. git 身份**:仓库里 `.git/config` 是我的 `yiyang774`。第一次 clone 后 git 会用你机器的全局身份,不需要动仓库级配置;要 push 到你自己的 fork 时改 `origin`。
+**5. Git identity**: the repo's `.git/config` carries my `yiyang774`. After clone, git uses your global identity — no per-repo change needed; when you push to your own fork, change `origin`.
 
-### 四、体检 + 自测
+### 4. Healthcheck + self-test
 
 ```bash
-# guard hook 自测(改过 guard 或 settings 都跑一次)
+# Guard hook self-test (run after any guard or settings change)
 ~/.claude/hooks/guard-selftest.sh
 
-# 记忆结构体检(判据只查结构,不判内容)
+# Memory structure healthcheck (purely structural — does not judge content)
 ~/.claude/bin/mem-check ~/.claude/projects/-Users-macbookpro/memory
 
-# 全局记忆索引(会自动加载进会话)——本仓不装记忆内容,首次运行为空是正常的
-ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(空,你要自己攒)"
+# Global memory index (auto-loaded into sessions) — this repo ships no memory content;
+# empty on first run is expected
+ls ~/.claude/projects/-*/memory/ 2>/dev/null || echo "(empty — you accumulate your own)"
 ```
 
-启一次 `claude`,随手问一句"当前工作目录",看:
+Start a `claude` session, ask something like "what's the current working directory", and check:
 
-- ✅ 会话正常起(env 段的 token / base URL 通了)
-- ✅ 没被 hook 拦(所有 hook 脚本路径都对)
-- ✅ `Skill` 工具可见 **`interview-me`**、`brainstorming`、`plan`、`spec` 等——**其中 `interview-me` 是所有编码/研究任务的第一步硬依赖**,缺则规划段无法启动;它由 Addy 的 `agent-skills` marketplace 分发,若这条对不上,先检查 `enabledPlugins` 里 `agent-skills@addy-agent-skills` 是否为 true
+- ✅ Session starts normally (the `env` token / base URL are reachable)
+- ✅ No hook blocks (every hook script path resolves)
+- ✅ The `Skill` tool sees **`interview-me`**, `brainstorming`, `plan`, `spec` etc. — **`interview-me` is the first hard-step dependency for every coding/research task**, missing it means the planning segment cannot start; it's distributed by Addy's `agent-skills` marketplace, so if this check fails first verify that `enabledPlugins` has `agent-skills@addy-agent-skills: true`
 
-三条都对就装好了。
+Three checks green → installed.
 
-### 五、几个常见坑(先说,免得踩)
+### 5. Common gotchas (worth knowing up front)
 
-- **hook 脚本路径必须是绝对路径**——`settings.json` 里的 `command: /Users/macbookpro/...` 必须整段改,写 `~/.claude/hooks/...` 或 `$HOME/...` 都会静默失效,Claude Code 不解析 `~`
-- **`.guard-off` 永不入库**——`.gitignore` 已排除,清帐时也别 commit
-- **`settings.local.json` 用于机器本地覆写**——想临时改 token / hook / 模型别改 `settings.json`,写在 `settings.local.json` 里,它天然被 `.gitignore` 排除,不会污染仓库
-- **`codegraph`、`rtk` 缺一个不影响主流程**——它们是加速器,不装只是慢一点/失去某个能力,规则本身仍能跑
-- **不要 clone 我的全局记忆去用**——本仓 `.gitignore` 顶层 `projects/` 已排除全局记忆条目,新装完 `MEMORY.md` 索引为空是正常的;那些是我自己踩坑攒的教训,直接搬会污染你的判断
+- **Hook script paths must be absolute** — `command: /Users/macbookpro/...` in `settings.json` must be replaced in full; `~/.claude/hooks/...` or `$HOME/...` silently no-op because Claude Code does not expand `~`
+- **`.guard-off` is never committed** — `.gitignore` already excludes it; don't commit it during cleanup either
+- **Use `settings.local.json` for machine-local overrides** — don't edit `settings.json` for temporary token / hook / model tweaks; write them into `settings.local.json`, which `.gitignore` already excludes and will never contaminate the repo
+- **Missing `codegraph` or `rtk` doesn't block the main flow** — they're accelerators; without them you're a bit slower or lose one capability, but the rules still run
+- **Don't clone my global memory and reuse it** — this repo's top-level `projects/` in `.gitignore` already excludes global memory entries; on a fresh install `MEMORY.md` is empty and that's correct. Those entries are lessons I paid for personally, and adopting them wholesale would pollute your judgment
 
-## 为什么要这么设计
+## Why it looks this way
 
-因为一个人在长会话里最容易犯的错是**"感觉做过了 = 真做了"。**这套规则把每个容易翻车的环节都变成**硬门槛——**少数高频手滑路径由 hook 兜底**(直接推 `main`、审查缺 `-s read-only`、报数没跑命令、说了"我会…"但没做),**其余硬门槛靠 L0 按规则执行和留痕**——CLAUDE.md 明确写着"guard 不替代任何硬门槛"。
+Because the single most common failure in long sessions is **"felt like I did it" = "actually did it"**. This rule system turns every step where I've slipped into a **hard gate** — **a few high-frequency slip paths are backed by hooks** (direct push to `main`, review call missing `-s read-only`, quantifier claim without a search command this turn, "I'll…" promise without a matching action) — **the rest of the hard gates still rely on L0 to execute the rule and leave a paper trail**. CLAUDE.md explicitly says "guards do not replace any hard gate."
 
-三个反复踩过的失败模式,规则各有对应答案:
+Three failure modes I keep hitting, each with a specific answer:
 
-| 失败模式 | 规则对策 |
+| Failure mode | The rule that catches it |
 |---|---|
-| **计划错了,后面再严的审也在错地基上盖楼** | Plan-Gate:据以派活的 spec/plan 必过 Codex 异构对抗审(标准流水线在派活前;实证流在拿到实验数据后的第 ⑧ 步) |
-| **同家族模型可能共享盲点** | frontier 审查恒用 Codex `gpt-5.6-sol`(前提:L0 是 Claude 家族)——不让做全部判断的 L0 给自己背书 |
-| **"应该没问题"直接进入结论** | 证据分三级(一手 / 二手 / 零级——零级即"由协议/构造必然为真的结果",看着像数据其实零信息量);Stop hook 拦截"报了数字但没跑过命令"的量词断言 |
+| **The plan is wrong, so every strict later review is building on a wrong foundation** | Plan-Gate: any spec/plan that will drive delegation must pass a Codex heterogeneous adversarial review (standard pipeline: before delegation; empirical flow: step ⑧ after the experiments produce data) |
+| **Same-family models can share blind spots** | Frontier review is always Codex `gpt-5.6-sol` (assuming L0 is a Claude-family model) — the model doing all the judgment doesn't get to sign off on itself |
+| **"Should be fine" slides straight into the conclusion** | Evidence has three tiers (first-hand / second-hand / zeroth — "zeroth" = a number that is true by protocol or construction, looks like data but carries zero information); a Stop hook blocks quantifier claims ("21 total", "all N passed") when no search command actually ran this turn |
 
-## 两条路:标准流水线 vs 实证流
+## Two routes: standard pipeline vs empirical flow
 
-拿到任务先分流,一句话判据:**做两个版本跑一跑,能用数字分出高下吗?**
+Route the task first. One-line test: **could I build two versions, run them, and let numbers decide?**
 
-- **能** → 走**实证流**:并行造原型 → **真跑出数据** → **后置**对抗审(让 frontier 模型拿到事实而非主张)
-- **不能**(只有一条路;或产出本身就是最终物如规范文本、架构定位) → 走**标准流水线**(下一节)
-- **拿不准** → 默认标准流水线
+- **Yes** → **empirical flow**: build prototypes in parallel → **actually run them and produce data** → adversarial review **afterwards** (so the frontier model evaluates facts, not claims)
+- **No** (only one path exists; or the output itself IS the final artifact, e.g. spec text, architecture verdict) → **standard pipeline** (next section)
+- **Not sure** → default to standard pipeline
 
-**实证流的入口有四条判据,必须全中**(缺一即走标准流水线):
+**The empirical flow has four entry criteria — all four must hold** (miss one → standard pipeline):
 
-1. 至少两个**关键机制有实质差异**的候选(改名 / 改参数 / 明显更差的陪跑项不算),能在同一接口、数据、资源预算、测量流程下运行
-2. 本次选择会直接改变后续 spec、实现方向或资源投入;至少一个主指标或硬约束**必须真跑才能获知**
-3. **在看结果之前** L0 已写好决策表(什么区间 → 触发什么动作,至少两个不同区间导致不同动作)
-4. 各候选留下可追溯的原始数据、配置、代码 hash,能估计噪声
+1. At least two candidates whose **key mechanisms differ substantively** (rename / re-parameterize / an obviously-worse strawman doesn't count), all runnable on the same interface, data, resource budget, and measurement pipeline
+2. This choice will directly change downstream spec, implementation direction, or resource commitment; at least one main metric or hard constraint **can only be known by actually running it**
+3. **Before results are seen**, L0 has written a decision table (which result region → which action, with at least two regions driving different actions)
+4. Every candidate leaves traceable raw data, config, code hash, and lets you estimate noise
 
-**九步流程**(细则 `ops/empirical-flow.md`,只列骨架):
-
-```
-① 预注册(候选表 + 指标契约 + 决策表 + 共享测量代码,过黄金样例)
-② 设计审(advisory,fail 不阻断) → 测法不公平回 ①
-③ 并行派 N 个 L1 写原型(spike;窄例外:允许 Gate 前派)，模型和人一样，给他一个topic，他也是胡思乱想，但是要是有具体的实验或者原型（从github上面找）简单实现之后再头脑风暴会好很多
-④ 原型快审(跨家族;作者是 codex 时由 Claude 审,advisory)
-⑤ 真跑 → runs/YYYY-MM-DD-<slug>-<候选>/
-⑥ 互盲分析(⑥A Codex sol ultra 证据账本 ‖ ⑥B Claude 全新上下文独立审阅)
-⑦ L0 定案(拆三小步):
-   ⑦A 亲自核原始数据 → 形成分歧清单
-   ⑦B 强制 interview-me 意图对齐(无条件) → 固化意图/偏好/非目标 + 处置意向(选其一/合成/全部不选/停止/补测)
-   ⑦C 按 ⑦B 处置意向分支执行(只有"选其一/合成"才写 spec/plan 进 ⑧)
-⑧ Plan-Gate(硬门槛,与标准流水线同款 sol ultra 四维单审)
-⑨ 生产化六步协议 → PR-GATE
-```
-
-窄例外:① 共享测量代码与 ③ 候选原型允许在 Gate 前派活(四条边界全中才成立,`ops/empirical-flow.md` §2③ 有对照表)——**探测可以先派,交付不能先派**;⑦C 后的生产化 spec/plan 仍须过 ⑧ 才能派实现。
-
-## 分层结构
+**The nine-step flow** (details in `ops/empirical-flow.md`; skeleton only here):
 
 ```
-L0 大脑(当前会话本体)     ← 思考、拆任务、定验收标准、收口
-   ↓ 派活
-L1 执行(codex luna / Sonnet 5 / Haiku 4.5)
-   ↓ 产出
-L2 快审(便宜的跨家族粗筛,fail 不阻断,不能替代 L3)
+① Pre-register (candidate list + metric contract + decision table + shared measurement code, passing golden samples)
+② Design review (advisory, non-blocking) → unfair measurement → back to ①
+③ Fan out N L1s writing prototypes (spike; narrow exception: allowed to dispatch before Gate)
+④ Prototype quick review (cross-family; if the author is codex, Claude reviews; advisory)
+⑤ Actually run → runs/YYYY-MM-DD-<slug>-<candidate>/
+⑥ Blind analysis (⑥A Codex sol ultra evidence ledger ‖ ⑥B Claude fresh-context independent review)
+⑦ L0 makes the call (three sub-steps):
+   ⑦A personally read raw data → form the disagreement list
+   ⑦B mandatory `interview-me` intent alignment (unconditional) → fix intent/preferences/non-goals + a disposition intent (pick-one / synthesize / all-rejected / stop / retest)
+   ⑦C branch-execute per ⑦B's disposition (only "pick-one / synthesize" writes spec/plan and enters ⑧)
+⑧ Plan-Gate (hard gate, same sol-ultra four-dimension single review as standard pipeline)
+⑨ Six-step productization protocol → PR-GATE
+```
+
+**Why is adversarial review pushed to the back?** With Plan-Gate up front, the reviewer is judging a spec that hasn't been built yet — it can only guess vulnerabilities by reasoning. On the 2026-08-03 CLAUDE.md refactor, four Plan-Gate rounds produced 64 items, and **more than half of rounds 2–4 were induced by the review itself** (fixing r1 spawned r2, fixing r2 spawned r3, fixing r3 spawned r4); the subsequent **7 L3 rounds on the same task caught 36 items**, including the pre-existing `plan-gate-direction.js` fail-open surfaced in r4/r5 — because L3 was reading the finished code, not guessing. A separate task on 2026-08-07 — a six-file empirical-flow rework — went to post-implementation L3 and the **first round already surfaced 5 blocking items**, reinforcing the same pattern.
+
+⚠️ **Both routes still pass Plan-Gate and L3 — only Plan-Gate's timing differs**: standard pipeline runs it **before the spec/plan is used to drive delegation**; the empirical flow runs it **after the experiments produce data and L0 has written the spec/plan** (step ⑧). Plan-Gate wasn't removed, only moved.
+
+⚠️ **Steps ⑥/⑦ have a hard requirement: model reports are only advisory, L0 must personally read the raw data** — don't just copy ⑥A/⑥B's conclusions. Even a fully-executed nine-step flow **cannot eliminate shared blind spots** (common metric definitions, shared measurement code, thinking patterns common to a model family); after ⑨ productization, run L2/L3 on the same hash and rerun tests + review on any substantive change.
+
+Narrow exception: ① shared measurement code and ③ candidate prototypes may be dispatched before Gate (only when all four boundary conditions hold; see the comparison table in `ops/empirical-flow.md` §2③) — **probing may run early, delivery may not**; the productized spec/plan from ⑦C still has to pass ⑧ before implementation can be dispatched.
+
+## Layered structure
+
+```
+L0 brain (this session itself)     ← think, split, define acceptance criteria, close
+   ↓ delegate
+L1 execution (codex luna / Sonnet 5 / Haiku 4.5)
+   ↓ output
+L2 quick review (cheap cross-family coarse pass, fail-non-blocking, cannot replace L3)
    ↓
-L3 终检(Codex gpt-5.6-sol xhigh,只读)  ← 硬门槛
+L3 final review (Codex gpt-5.6-sol xhigh, read-only)  ← hard gate
    ↓
-L0 收口(读 L3 → 逐条核验 → 拍板)
+L0 closes (read L3 → verify each item → call it)
 ```
 
-**Plan-Gate**(单进程 sol ultra、四维单审)审的是 spec + plan,不是代码。**触发时点分两条路**:标准流水线在**据以派活的 spec/plan 派活之前**;实证流在第 ⑧ 步(拿到实验数据后)。这是把"异构换视角"移到最该兜底的地基层。
+**Plan-Gate** (single sol-ultra process, four-dimension single review) reviews the spec + plan, not the code. **Its trigger point splits by route**: standard pipeline fires it **before the spec/plan is used to drive delegation**; the empirical flow fires it at step ⑧ (after the experiments produce data). This front-loads "heterogeneous perspective" to the foundation, where mistakes are cheapest to catch.
 
-**Fable 5** 不进入执行/审查分层——它只是 Plan-Gate 架构僵局时的**只读顾问**,窄触发、每次现场征得用户同意。
+**Fable 5** does **not** sit in the execution/review tiers — it's a **read-only advisor** for Plan-Gate architecture deadlocks only, narrowly triggered, requiring live user consent each time.
 
-## 硬门槛清单
+## The hard gates
 
-| 锚点 | 作用 | 何时触发 |
+| Anchor | Purpose | When it fires |
 |---|---|---|
-| `[PLAN-GATE]` | 据以派活的 spec/plan 必过对抗审(标准流:派活前;实证流:第 ⑧ 步) | 任何据以派活的计划性产出 |
-| `[OWNERSHIP]` | 意图与 go/no-go 归 L0 | 全程 |
-| `[EVIDENCE-FIRST]` | 每层都要验证,证据分三级(一手/二手/零级) | 全程 |
-| `[SELF-CONTAINED-BRIEF]` | 委派简报必须自包含 | 每次派 subagent |
-| `[DELEGATION-BAND]` | 单次委派实现代码 ≤400 目标线、≤600 硬上限(测试不计) | 每次派活 / L0 自己动手 |
-| `[GRANT-PERMISSIONS]` | 一次给足权限;审查者只读 | 每次调 codex / subagent |
-| `[DIAGNOSE-FAILURE]` | 失败要诊断,别盲目重试——先定位,再改简报/升层/接管 | 任何一层产出差时 |
-| `[SKILL-PIPELINE]` | 规划段(仅 L0/活跃用户):`interview-me`(无条件)→ `brainstorming` → `writing-plans`(brainstorming 唯一后继,不用 plan/spec 替代);执行段(可派子代理):`test`/TDD → `build` → `review` → `ship` | 任何编码或研究任务 |
-| `[PR-GATE]` | GitHub 改动只开 PR、必过 Codex 终检 | 任何要进 GitHub 的改动 |
-| `[PRIMARY-SOURCE]` | 需要原文支撑的外部取材必须走 codex,`WebSearch` 摘要禁止当原文 | 任何引用外部资料 |
-| `[PLAIN-LANGUAGE]` | 别自创高浓度词汇 | 面向人的输出 |
-| `[FABLE-ADVISOR]` | Fable 5 只读顾问,非常规 break-glass | 极窄触发 |
-| `[ENGINE-ASSIGNMENT]` | frontier 审查只用 Codex | 全程 |
+| `[PLAN-GATE]` | Any spec/plan that will drive delegation must pass adversarial review (standard: before delegation; empirical: step ⑧) | Any planning artifact that will drive execution |
+| `[OWNERSHIP]` | Intent and go/no-go belong to L0 | Always |
+| `[EVIDENCE-FIRST]` | Every tier verifies; evidence tiered into three levels (first-hand / second-hand / zeroth) | Always |
+| `[SELF-CONTAINED-BRIEF]` | Delegation briefs must stand on their own | Every subagent call |
+| `[DELEGATION-BAND]` | Single delegation ≤400 LOC target, ≤600 hard cap (implementation code; tests excluded) | Every delegation / when L0 codes directly |
+| `[GRANT-PERMISSIONS]` | Grant enough permissions in one shot; reviewers stay read-only | Every codex / subagent call |
+| `[DIAGNOSE-FAILURE]` | Diagnose failures before retrying — locate the cause, then rewrite the brief / escalate / take over | Any tier producing poor output |
+| `[SKILL-PIPELINE]` | Planning segment (L0 / active user only): `interview-me` (unconditional) → `brainstorming` → `writing-plans` (brainstorming's sole successor; do not substitute plan/spec); Execution segment (subagents allowed): `test`/TDD → `build` → `review` → `ship` | Any coding or research task |
+| `[PR-GATE]` | GitHub changes go through PR only, must pass Codex final review | Any change destined for GitHub |
+| `[PRIMARY-SOURCE]` | External material that needs an original source must go through codex; `WebSearch` snippets are never quotable as source | Any external citation |
+| `[PLAIN-LANGUAGE]` | Don't coin dense jargon | Any human-facing output |
+| `[FABLE-ADVISOR]` | Fable 5 as read-only advisor, break-glass only | Extremely narrow trigger |
+| `[ENGINE-ASSIGNMENT]` | Frontier review is Codex-only | Always |
 
-## 强制执行层(hooks)
+## The enforcement layer (hooks)
 
-规则光写着没用,人会忘。所以规则本身也被脚本兜底:
+Rules on paper don't stop humans from forgetting. So the rules themselves get script backup:
 
-- 🔴 **PreToolUse 硬拦**:PR 直接合并、推默认分支、审查调用缺 `-s read-only` — 拦截**可识别的直接调用形式**(已知缺口见 MISTAKES.md E006:`VAR=val cmd ...` 前缀赋值会绕过前缀 glob;备案未修)
-- 🟡 **Stop 证据闸**:回复里出现"共 N 处"、"全部通过"、"没有任何"这类量词断言但本回合没跑过任何检索命令 — 打回
-- 🟡 **Stop 承诺闸**:回复里出现"我会…"、"稍后补…"这类第一人称未来承诺但本回合没对应动作 — 打回
-- **SessionStart / PreCompact / Stop 三个 journal hook**:辅助记录——SessionStart 注入进行中日志清单,PreCompact 写 `.precompact/` 快照,Stop 提醒并给事实草稿;**规范事件流本身仍靠 L0 自觉**(见"记忆与任务日志"节)
+- 🔴 **PreToolUse hard-block**: direct PR merge, push to default branch, review call missing `-s read-only` — blocks **recognizable direct call forms** (known gap in MISTAKES.md E006: `VAR=val cmd ...` assignment prefix bypasses the prefix globs; deferred, not patched)
+- 🟡 **Stop evidence gate**: reply contains a quantifier claim ("21 total", "all passed", "no such case") but no search command ran this turn — bounced
+- 🟡 **Stop promise gate**: reply contains a first-person future promise ("I'll…", "I'll add… next") without a matching tool call this turn — bounced
+- **SessionStart / PreCompact / Stop journal hooks**: assistance only — SessionStart injects the list of ongoing journals, PreCompact writes a `.precompact/` snapshot, Stop reminds the model and provides a fact draft; **the canonical event stream still relies on L0's discipline** (see the "Memory and task journal" section)
 
-急停两种方式,机制不同,别混用:
-- **`GUARD_OFF=1`**:必须**在启动 Claude Code 之前**由外部环境预导出(`GUARD_OFF=1 claude ...`);PreToolUse 在命令执行**前**跑,同一次调用里写 `export GUARD_OFF=1 && <cmd>` 无效,`export` 还没进程内 hook 就已经拦了
-- **`touch ~/.claude/.guard-off`**:会话中途也生效,但**必须当场向用户声明理由,用完立即 `rm -f`**,忘删会静默让整套 guard 失效(2026-08-07 实测踩过)
+Two kill-switch mechanisms, they work differently, don't mix them up:
+- **`GUARD_OFF=1`**: must be **pre-exported before Claude Code starts** (`GUARD_OFF=1 claude ...`); PreToolUse runs **before** the command executes, so writing `export GUARD_OFF=1 && <cmd>` in a single call is ineffective — the `export` hasn't taken effect when the hook already fires
+- **`touch ~/.claude/.guard-off`**: works mid-session too, but **you must declare the reason live and `rm -f` immediately when done**; forgetting to delete it silently disables the whole guard layer (learned the hard way on 2026-08-07)
 
-急停 ≠ 豁免任何硬门槛——Plan-Gate、L3、PR-GATE 照旧生效,guard 只是它们的提醒层。
+Kill switch ≠ exemption from any hard gate — Plan-Gate, L3, PR-GATE all remain in force; the guards are only their reminder layer.
 
-## 代码定位与影响面:codegraph
+## Code location and blast radius: codegraph
 
-grep 找得到"哪一行出现了这个名字",找不到"改了它会波及什么"——尤其聚合函数、共用工具、动态派发。规则把这层能力接进来:**改共用函数前必跑 `codegraph impact <symbol>`**,看波及面与会挂的测试。
+The rule system uses **codegraph** for one very specific job: **before changing a shared utility or aggregation function, run `codegraph impact <symbol>` to see what it touches and which tests will break**. Grep and semantic search structurally cannot do this — grep finds *names*, not the transitive set of files that will actually be affected via dynamic dispatch, trait impls, or wrapper layers.
 
-**前提**:只在有 `.codegraph/` 索引的仓库适用;没有就当它不存在——**建不建索引是用户的决定,规则不擅自建**。
-
-**用起来的四条命令**(细则 `ops/codegraph.md`):
+Ready-to-use if your repo has a `.codegraph/` directory (indexing is the user's decision, don't run `codegraph init` yourself). Four CLI commands cover the main use cases:
 
 ```bash
-codegraph impact <symbol>          # 改它会波及什么、哪些测试会挂
-codegraph callers <symbol>         # 谁调用了它
-codegraph callees <symbol>         # 它调用了谁
-codegraph explore "<问题或符号名>"  # 逐字源码 + 调用路径
+codegraph impact <symbol>     # blast radius: all symbols and tests that will be affected
+codegraph callers <symbol>    # who calls this
+codegraph callees <symbol>    # what does this call
+codegraph explore "<query>"   # verbatim source of relevant symbols + call paths between them
 ```
 
-⚠️ `impact` / `callers` / `callees` **只有 CLI 有**——MCP 侧默认只暴露 `codegraph_explore` 一个工具(实测 `tools/list` 确认)。别去找 `mcp__codegraph__impact`,它不存在,走 Bash。
+⚠️ **Trap: the MCP interface only exposes `explore`** — there is no `mcp__codegraph__impact`. Blast-radius analysis is CLI-only; if you dispatch a subagent to do it, tell it explicitly to use the shell `codegraph impact` command, otherwise it will call `codegraph_explore` and hand back names instead of blast radius.
 
-**为什么不是 grep 快慢的问题——是结构上做不到**:paperI_motivation 全仓实测(2026-08-05),`impact cluster_bootstrap` 报 **68 个受影响符号**,**其中 36 个所在文件从头到尾没出现过该符号名**(动态派发经聚合层链条到达),grep 永远找不到;且这 36 个里 33 个是测试。这正对症一次"聚合链最后一步藏雷、常数单测测不出"的事故(`delta_c_bootstrap` 双重 bootstrap 把置信区间压窄 28 倍)。
+Empirical evidence (from paperI_motivation): `codegraph impact cluster_bootstrap` returned 68 hits — 36 of them completely invisible to grep, 33 of those being tests. Without the graph you'd change a bootstrap helper and only discover a week later, through CI red, that a downstream metric silently drifted.
 
-**日常零操心**:本机已接 MCP + `UserPromptSubmit` hook——代码类提问会**自动注入结构上下文**,不必主动想起;写 spec / 改措辞 / 问口径这类非代码对话注入 **0 字符**,无成本。
+The `UserPromptSubmit` hook (`codegraph prompt-hook`) auto-injects relevant graph context into each prompt turn when a `.codegraph/` exists — no manual invocation needed for read paths.
 
-**派子代理时必须写进简报**(子代理无会话记忆,给路径没用):
+When dispatching a subagent, put this exact line into the brief:
 
-> 本仓已建 codegraph 索引;改共用函数前先跑 `codegraph impact <symbol>`,看波及面与会挂的测试。
+> "This repo has `.codegraph/`; before changing shared utilities or aggregation functions, run `codegraph impact <symbol>` (CLI) to check blast radius. The MCP side only exposes `codegraph_explore`, which does NOT return blast radius."
 
-**卫生**:`.codegraph/` **必须进 `.gitignore`**——机器生成、体积不小,不进版本控制。参考开销: 全仓 **4,930 节点 / 12,423 边、索引耗时 1.3 秒、产物 16 MB**。
+**`.gitignore` hygiene**: the `.codegraph/` index directory should not be committed — it's regenerated per machine. This repo's `.gitignore` already excludes it. Cost is small: on paperI_motivation the graph is 4930 nodes / 12423 edges, ≈1.3 s to rebuild, 16 MB on disk — cheap enough to leave live.
 
-## ops 文件是"唯一事实源"
+## `ops/` files are the one source of truth
 
-`CLAUDE.md` 只给指针,不复制内容。每个硬门槛的**可跑命令、参数顺序、失败处理、实测踩过的坑**都写在 `ops/<name>.md` 里:
+`CLAUDE.md` only holds pointers, never copies. For every hard gate, the **runnable command, argument order, failure handling, and battle-scars** live in `ops/<name>.md`:
 
-- `ops/plan-gate.md` — Plan-Gate 命令 + agent 类型对照 + L3 拆多路并发实测
-- `ops/l2.md` — L2 快审的选档、格式、fail-不阻断细则
-- `ops/pr-merge.md` — PR 三闸(head/base 双 OID 绑定 + 工作区纯净)
-- `ops/enforcement.md` — guard hook 的自测、加规则、临时关闭
-- `ops/preflight.md` — 跑实验/连远程/用 GPU 前的一次性 checklist
-- `ops/journal.md` — 七类必记事件、错误档双状态字段
-- `ops/line-count.md` — `[DELEGATION-BAND]` 的机械行数复核细则
-- `ops/empirical-flow.md` — 实证流(能拆 ≥2 个可比候选时走这条)
-- `ops/project-layout.md` — 项目骨架 / slug 命名 / 实验总表口径
-- `ops/fable5.md` — Fable5 顾问的四件事记录、现场同意 fail-closed
-- `ops/codegraph.md` — 代码定位与影响面分析
+- `ops/plan-gate.md` — Plan-Gate command + subagent type comparison + L3 fan-out data
+- `ops/l2.md` — L2 quick review: model selection, format, fail-non-blocking details
+- `ops/pr-merge.md` — PR three-gate (head/base dual-OID binding + clean worktree)
+- `ops/enforcement.md` — guard hook self-test, adding rules, temporary disable
+- `ops/preflight.md` — one-shot checklist before running experiments / connecting remotes / using GPU
+- `ops/journal.md` — seven event types that must be logged, dual-status field in mistake log
+- `ops/line-count.md` — mechanical LOC verification for `[DELEGATION-BAND]`
+- `ops/empirical-flow.md` — empirical flow (when the task splits into ≥2 comparable candidates)
+- `ops/project-layout.md` — project skeleton / slug naming / experiment index conventions
+- `ops/fable5.md` — Fable5 advisor's four-item record and live consent fail-closed rules
+- `ops/codegraph.md` — code location and blast-radius analysis
 
-**跑硬门槛前先 Read 对应 ops 文件**——凭记忆拼参数会静默失效或被 hook 挡下,这是实测踩出来的。
+**Read the corresponding ops file before firing a hard gate** — reconstructing arguments from memory either silently fails or gets blocked by a hook, and I've paid for that lesson.
 
-## 记忆与任务日志
+## Memory and task journal
 
-除了硬门槛和 hooks,规则本身还规定了 L0 该**记什么、怎么记、放哪儿**——因为跨会话最容易丢的东西是"上次踩过的坑"。
+Beyond hard gates and hooks, the rule system also dictates what L0 **must remember, how, and where** — because the thing that most reliably vanishes across sessions is "the mistake I made last time."
 
-**三层记忆**(判据一句话:**换个项目还用得上吗?**)
+**Three memory tiers** (one-line test: **would this still be useful on a different project?**)
 
-| 层 | 位置 | 收什么 | 是否入库 |
+| Tier | Location | What goes here | Committed? |
 |---|---|---|---|
-| 全局 | `~/.claude/projects/<编码后的工作目录>/memory/*.md` + 同目录 `MEMORY.md` 索引(本机是 `projects/-Users-macbookpro/memory/`) | 跨项目可复用的教训 / 偏好 / 方法论(索引进会话自动加载) | 本仓库 `.gitignore` 忽略顶层 `projects/`,不入库 |
-| 项目 | `<项目>/docs/superpowers/memory/*.md` + 该项目 `MEMORY.md` | 只有单个项目才用得上的状态与细节;进项目先读它自己的 `MEMORY.md` | 由**各项目自己**决定是否入库;本仓库的 `.gitignore` 不会自动排除 |
-| 时间线 | `<项目>/docs/superpowers/journal/YYYY-MM-DD-<slug>.md` | 一任务一份;头部状态快照(每次覆写)+ 事件流(**只追加、绝不改写历史**——否则会"整理"掉不利记录,日志失去证据价值) | 同上 |
+| Global | `~/.claude/projects/<encoded-cwd>/memory/*.md` + `MEMORY.md` index in the same dir (on this machine: `projects/-Users-macbookpro/memory/`) | Cross-project reusable lessons / preferences / methodologies (index auto-loads at session start) | This repo's `.gitignore` excludes top-level `projects/` — not committed |
+| Project | `<project>/docs/superpowers/memory/*.md` + that project's `MEMORY.md` | State and details that only matter inside one project; read the project's `MEMORY.md` on entry | **Each project decides for itself**; this repo's `.gitignore` does NOT auto-exclude it |
+| Timeline | `<project>/docs/superpowers/journal/YYYY-MM-DD-<slug>.md` | One file per task; header status snapshot (overwritten each turn) + event stream (**append-only, never rewritten** — otherwise unfavorable records get "tidied away" and the journal loses its evidence value) | Same as above |
 
-**何时建 journal**(命中任一即建):走 brainstorm+plan 的复杂任务、进 Plan-Gate、单次实现 >400 行、已产 spec/plan 且据以落地、判定进实证流(须在**任何 Gate 前实现派活之前**记入口判据 + 决策表——事后补记不算)。纯对话、小事实查询、≤400 行普通委派不建。
+**When to create a journal** (any trigger fires it): complex task going through brainstorm+plan; entering Plan-Gate; a single implementation delivery >400 LOC; a spec/plan has been produced and is going to be executed; committing to the empirical flow (entry criteria conclusions + decision table must be logged **before any pre-Gate implementation dispatch** — retroactive logging doesn't count). Plain conversation, small fact lookups, and ordinary ≤400 LOC delegations do NOT create a journal.
 
-**错误档 `<项目>/docs/superpowers/journal/MISTAKES.md`**:只收本项目特有的坑(跨项目通用教训归全局 `memory/`)。派活前跑 `bin/mistakes [关键词]` 直接产出可粘贴到子代理简报里的教训片段(子代理无会话记忆,给路径没用)。
+**Mistake log `<project>/docs/superpowers/journal/MISTAKES.md`**: project-specific traps only (cross-project lessons go into global `memory/`). Before delegating, `bin/mistakes [keyword]` prints ready-to-paste lesson snippets for subagent briefs (subagents have no conversation memory — a file path won't help them).
 
-**记忆条目的固定形态**:frontmatter 里带 `name` / `description` / `type`(user | feedback | project | reference),body 里用 `[[name]]` 相互链接。写前先扫有没有覆盖同一件事的旧条目,重复的更新旧的、别新建;发现错的直接删掉。
+**Memory entry shape**: frontmatter with `name` / `description` / `type` (user | feedback | project | reference); body uses `[[name]]` for cross-links. Scan for an existing entry that already covers the same thing before writing — update the old one rather than adding a duplicate; delete outright when something turns out to be wrong.
 
-**体检 / 工具**:
-- `bin/mem-check [目录]` — 5 类**纯结构**检查(悬空 `[[链接]]`、`MEMORY.md` 索引同步、孤立笔记、frontmatter 缺字段、疑似重复);**不判断内容是否应下沉**,那要靠人
-- `bin/mistakes [关键词]` — 从 MISTAKES.md 抽 active 项拼成简报片段
-- **hook 只做辅助**:`SessionStart` 注入进行中日志清单、`PreCompact` 写 `.precompact/` 快照、`Stop` 提醒模型更新日志并给事实草稿——**规范事件流本身仍靠 L0 自觉**(`ops/journal.md` 明确写着"事件流内容仍靠自觉、无机器强制")
+**Healthcheck / tools**:
+- `bin/mem-check [dir]` — 5 **purely structural** checks (dangling `[[links]]`, `MEMORY.md` index consistency, orphan notes, missing frontmatter fields, near-duplicates); **does NOT judge whether content should be demoted** — that's a human call
+- `bin/mistakes [keyword]` — extracts active items from MISTAKES.md into a brief snippet
+- **Hooks only assist**: `SessionStart` injects the list of ongoing journals, `PreCompact` writes a `.precompact/` snapshot, `Stop` reminds the model to update the journal and provides a fact draft — **the canonical event stream itself still relies on L0's discipline** (`ops/journal.md` explicitly says "event-stream content still relies on discipline, no machine enforcement")
 
-⚠️ **本仓库只装机制,不装内容**:全局记忆条目落在 `~/.claude/projects/`,由本仓库 `.gitignore` 顶层 `projects/` 排除;项目记忆和日志落在各项目自己的 `docs/superpowers/`,是否入库归各项目决定。**别 clone 我的全局记忆去用**——那是我自己踩坑攒的,直接搬会污染你的判断。你要建的是你自己的。
+⚠️ **This repo ships the mechanism, not the contents**: global memory entries live under `~/.claude/projects/`, excluded by this repo's top-level `projects/` in `.gitignore`; project memory and journals live under each project's own `docs/superpowers/`, and whether they get committed is that project's call. **Don't clone my global memory and reuse it** — it's mine, accumulated from my own mistakes, and adopting it wholesale would pollute your judgment. Grow your own.
 
-## 用起来大概长啥样
+## What a run looks like
 
-标准流水线一次典型任务(实证流的 ①–⑦ 见上一节;⑧ 起走本节的第 4 步之后):
+A standard-pipeline typical task (empirical flow ①–⑦ see the earlier section; from ⑧ onward, resume with step 4 onward below):
 
-1. `interview-me` skill(无条件)一问一答挖清意图/偏好/非目标——L0/活跃用户上下文专属
-2. `brainstorming` skill 依 interview 结果聊到候选方案 → 拿到用户认可(HARD-GATE,没认可不写一行代码)
-3. `writing-plans` skill 拆任务,给验收标准(按 brainstorming 唯一后继契约,不用替代 skill)
-4. **Plan-Gate**(单进程 sol ultra 四维单审 + 有罪推定):按 `ops/plan-gate.md` 里的完整脚本发起,输入含 `intent.txt`(interview 后用户确认的意图/裁定,权威解释源);NO-GO 意见交给 L0 分诊——**go/no-go 归 L0**(异议若确属误报可书面放行;非致命异议自行取舍)
-5. 派 L1(默认 codex luna;强耦合改动 → Sonnet 5;机械批量 → Haiku 4.5),简报自包含 + 显式全权授权 + 逐字带上"环境与威胁模型"段(`ops/plan-gate.md` §🔻)
-6. L1 落地(执行段:先 `test` 写失败测试 → `build` 小步实现 → `review` 作者自检——TDD 顺序不得倒置)
-7. **L2 快审**(便宜的跨家族粗筛,fail 不阻断,不能替代 L3;见 `ops/l2.md`)
-8. **L3 终检**:按 `ops/plan-gate.md` 里的调用形态,例如 `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
-9. L0 分诊 → 逐条修 → **对【最终态】再跑一次 L3**(移动靶陷阱,§2.6;逐轮 GO 只对当轮的移动靶成立,不等于最终状态正确)→ 冻结态 L3 通过后由 **L0 拍板**
-10. 要进 GitHub:先读 `ops/pr-merge.md` → `gh pr create` → codex 审 PR + head/base 双 OID 绑定 + 工作区纯净三闸 → 合并前重取远端 OID 与留痕逐一比对 → 由**用户本人**执行合并(L0 只给 go/no-go 建议,自己绝不跑 `gh pr merge`)
+1. `interview-me` skill (unconditional) — one-question-at-a-time to extract intent/preferences/non-goals; L0/active-user context only
+2. `brainstorming` skill — take interview output, converge to a candidate design → get user approval (HARD-GATE: no approval, no code)
+3. `writing-plans` skill to split with explicit acceptance criteria (per brainstorming's sole-successor contract, do NOT substitute other plan/spec skills)
+4. **Plan-Gate** (single sol-ultra process, four-dimension single review, presumption of guilt): fire it via the complete script in `ops/plan-gate.md`, inputs include `intent.txt` (the user-confirmed intent/adjudication after interview, authoritative interpretation source); NO-GO items go to L0 for triage — **go/no-go belongs to L0** (an objection verified as a false positive may be released with a written reason; non-critical suggestions are L0's call)
+5. Delegate to L1 (default codex luna; deeply coupled changes → Sonnet 5; mechanical batch → Haiku 4.5), self-contained brief + explicit permission grant + verbatim inclusion of the "environment and threat model" block from `ops/plan-gate.md` §🔻
+6. L1 implements (execution segment: `test` writing a failing test → `build` incremental implementation → `review` author self-check — TDD order must not be inverted)
+7. **L2 quick review** (cheap cross-family coarse pass, fail-non-blocking, cannot replace L3; see `ops/l2.md`)
+8. **L3 final review**: use the call form in `ops/plan-gate.md`, e.g. `codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" -s read-only review --uncommitted`
+9. L0 triages → fixes each item → **re-run L3 on the FROZEN final state** (moving-target trap, §2.6; a GO on each round only holds for that round's moving target, not for the final state) → after frozen-state L3 passes, **L0 calls it**
+10. To land on GitHub: read `ops/pr-merge.md` first → `gh pr create` → codex reviews the PR + head/base dual-OID binding + clean-worktree three-gate → re-fetch remote OIDs and match against the paper trail before merge → **the user (not L0) performs the merge** (L0 only issues a go/no-go recommendation and never runs `gh pr merge`)
 
-## 谁能用
+## Who can use this
 
-这套规则是我个人在长任务里踩坑攒出来的,**默认单机单用户环境**——路径写死 `/Users/macbookpro/...`。
+I built this from mistakes I made in my own long tasks. **Default is single-machine, single-user use** — paths are hardcoded to `/Users/macbookpro/...`.
 
-⚠️ **默认威胁模型是"本机单人开发、无不可信输入、产物不对外服务"**(见 `ops/plan-gate.md` §🔻,codex 简报里逐字带这段是为了覆盖 codex 默认按公网多租户产品设的模型)。**产物若要上线、对外服务、处理他人数据或进公共仓库,必须重写这段威胁模型**——否则外部读者拿这套规则去审对外产物,审查会按指令忽略在那个环境真实可达的输入与权限问题。
+⚠️ **The default threat model is "local single-user development, no untrusted input, output does not serve external parties"** (see `ops/plan-gate.md` §🔻 — every codex brief carries this block verbatim to override codex's default public-internet multi-tenant product model). **If the output will go online, serve external parties, process other people's data, or enter a public repo, you MUST rewrite this threat model block** — otherwise an outside reader using these rules to review an outward-facing product will follow the instruction and ignore inputs and permissions genuinely reachable in that environment.
 
-想跨机复用需要:
+To reuse cross-machine:
 
-1. 用户名不同就全局改路径(或改成 `$HOME`)
-2. `settings.json` 里的 token / base URL 是我的私人代理路由,你要换成自己的
-3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` 是我本地代理暴露的模型名,你环境里名字可能不一样
-4. 本仓库**不含 skill 包**——`CLAUDE.md` 明确提到的 skill 名(`interview-me`、`brainstorming`、`spec`、`plan`、`build`、`incremental-implementation`、`test`、`review`、`ship`、`systematic-debugging`、`debugging`、`writing-plans`、`dispatching-parallel-agents`、`using-agent-skills`、`using-superpowers`)由 `settings.json` 的 `enabledPlugins` / `extraKnownMarketplaces` 段列出的 marketplace 分发——Addy 的 `agent-skills`(含 `interview-me`)、`superpowers-marketplace`、`openai-codex`、`ralph-loop`。若你有其他本地私有 skill 想接进来,自己配 marketplace 或 symlink 即可,本仓库不提供
+1. A different username means rewriting paths (or switching them to `$HOME`)
+2. `settings.json` has my personal proxy tokens and base URLs — replace with your own
+3. `Fable 5` / `Codex gpt-5.6-sol / gpt-5.6-luna` are model names exposed by my local proxy — the names in your environment will differ
+4. This repo **does not ship skill packs** — the skills explicitly mentioned in `CLAUDE.md` (`interview-me`, `brainstorming`, `spec`, `plan`, `build`, `incremental-implementation`, `test`, `review`, `ship`, `systematic-debugging`, `debugging`, `writing-plans`, `dispatching-parallel-agents`, `using-agent-skills`, `using-superpowers`) are distributed by the marketplaces listed under `enabledPlugins` / `extraKnownMarketplaces` in `settings.json` — Addy's `agent-skills` (which contains `interview-me`), `superpowers-marketplace`, `openai-codex`, `ralph-loop`. If you have other private local skills to wire in, configure your own marketplace or symlink; this repo does not provide them
 
-## 授权
+## License
 
-规则文本部分:任意使用、修改、二次分发,不作任何保证——这是我个人工作流,不是产品。
+Rule text: do whatever you want, no warranty — this is my personal workflow, not a product.
 
-## 引用
+## Cite
 
-如果这套规则对你有启发,欢迎引用仓库地址:
+If this rule system inspires yours, the repo lives at:
 
 ```
 https://github.com/yiyang774/scriptorium
