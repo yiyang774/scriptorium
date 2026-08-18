@@ -10,14 +10,13 @@ A rule system that keeps Claude Code from concluding "should work" when doing en
 
 The **rule body** of my `~/.claude/`, no runtime data.
 
-59 files, by directory:
+48 files, by directory:
 
 | Directory | Files | Content |
 |---|---|---|
 | `ops/` | 14 | One source of truth for each hard gate (never reconstruct commands from memory) |
 | `hooks/` | 13 | The enforcement layer (PreToolUse / Stop / SessionStart hook scripts) |
 | `workflows/` | 9 | Workflow scripts (`deep-research.js`, the `finding-loop/` Python module, `_retired/`) |
-| `docs/` | 11 | Historical task archives under `docs/superpowers/{journal,plans,specs}/` (kept as examples) |
 | `bin/` | 5 | CLI helpers (`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
 | `agents/` | 1 | Currently only `fable-readonly-advisor.md` (Fable5 advisor subagent definition) |
 | top level | 6 | `CLAUDE.md` (13 iron laws + 4 chapters), `README.md` (English, primary) / `README.zh.md` (Chinese), `RTK.md`, `settings.json`, `.gitignore` |
