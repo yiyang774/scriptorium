@@ -12,14 +12,13 @@
 
 `~/.claude/` 的**规则本体**,不含运行时数据。
 
-包含 59 个文件,按目录:
+包含 48 个文件,按目录:
 
 | 目录 | 文件数 | 内容 |
 |---|---|---|
 | `ops/` | 14 | 各硬门槛的细则(唯一事实源,不得凭记忆拼命令) |
 | `hooks/` | 13 | 强制执行层(PreToolUse / Stop / SessionStart 等 hook 脚本) |
 | `workflows/` | 9 | 工作流脚本(`deep-research.js`、`finding-loop/` Python 模块、`_retired/` 退役件) |
-| `docs/` | 11 | `docs/superpowers/{journal,plans,specs}/` 里的历史任务档案(留作范例) |
 | `bin/` | 5 | 命令行小工具(`newproj` / `mem-check` / `mistakes` / `l2` / `exp-index`) |
 | `agents/` | 1 | 目前只有 `fable-readonly-advisor.md`(Fable5 顾问的 subagent 定义) |
 | 顶层 | 6 | `CLAUDE.md`(13 铁律 + 4 章分层)、`README.md`(英文主)/ `README.zh.md`(中文)、`RTK.md`、`settings.json`、`.gitignore` |
